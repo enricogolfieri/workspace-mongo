@@ -1,0 +1,17 @@
+#for every folder in __dir run tmux with tail -F on mongod.log
+__jcolor_cmd="python $HOME/.config/workspace/envs/mongo/bashscripts/jcolor.py"
+__log=$1/unified.log
+
+rm -rf $__log
+for d in "$1"/*; do
+    if [ -d "$d" ]; then
+        for subdir in "$d"/*; do
+            if [ -f "$subdir/mongod.log" ]; then
+                echo "Tailing $subdir/mongod.log"
+                tail -F $subdir/mongod.log | $__jcolor_cmd > $__log &
+            fi
+        done
+    fi
+done
+
+tail -f $__log

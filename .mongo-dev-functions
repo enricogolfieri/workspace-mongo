@@ -1,0 +1,704 @@
+# Resets the working tree to its initial state (as if it had just been cloned)
+# and creates a Python virtual environment with all the requirements installed.
+# All uncommitted changes and unversioned files will be lost (subject to
+# confirmation by the user).
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+
+alias resmoke='python ./buildscripts/resmoke.py'
+
+mongo-new-branch()
+{
+
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	__new_branch=$1
+	__description=$2
+
+	[[ -z ${__new_branch} ]] && echo "new branch name is required" && return 1;
+	[[ -z ${__description} ]] && echo "branch description is required" && return 1;
+
+	${__cmd_prefix} git checkout  ${__mongo_branch} || ( echo "error occured while moving to ${__mongo_branch}, please fix the error fist and try again" && return 1 );
+	${__cmd_prefix} git pull origin ${__mongo_branch} || ( echo "error occured while pulling from ${__mongo_branch}, please fix the error fist and try again" && return 1 );
+	${__cmd_prefix} git checkout -b ${__new_branch} || ( echo "error occured while creating new branch ${__new_branch}, please fix the error fist and try again" && return 1 );
+
+	${__cmd_prefix} __set_branch_description "$__description";
+
+	if [ "${__mongo_branch}" != "$MONGO_WORKDIR_BRANCH" ]; then
+		${__cmd_prefix} mongo-prepare
+		${__cmd_prefix} mongo-configure	
+	fi
+
+	${__cmd_prefix} mongo-build
+
+	)
+
+}
+
+mongo-prepare ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	if [[ ${__cmd_prefix} != echo ]]; then
+		echo "WARNING: All uncommitted changes and unversioned files will be lost";
+		read -p "Are you sure you want to proceed? [y/N] ";
+		[[ ${REPLY} =~ (y|Y) ]] || return 0;
+	fi
+
+	[[ -n ${VIRTUAL_ENV} ]] && ${__cmd_prefix} deactivate;
+	${__cmd_prefix} \git clean -fdx;
+	${__cmd_prefix} ccache -C;
+
+	case ${__mongo_branch} in
+		v4.0)
+			${__cmd_prefix} \virtualenv -p python2 ${MONGO_VENV_DIRNAME};
+			${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+			${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python2 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
+		;;
+		*)
+			${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
+			${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+			${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
+		;;
+	esac 
+
+	#install db-contrib-tools
+	${MONGO_VENV_DIRNAME}/bin/python3  -m pip install pipx
+	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
+	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
+	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+	
+	)
+
+}
+
+# Generates the `build.ninja` and `compile_commands.json` files, which are
+# required by the underlying build system (i.e. Ninja) and the language server
+# (i.e. ccls or clangd) respectively. The `mongo-build` function automatically
+# generates these files when they do not exist. However, this function must be
+# explicitly executed when a SCons configuration is changed (e.g. after adding
+# or removing a source file) and consequently the `build.ninja` and
+# `compile_commands.json` files must be recreated.
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+#   - Compiler family: --clang (default), --gcc
+#   - Compiling mode: --debug (default), --release
+#   - Linking mode: --dynamic (default), --static
+#   - All those of buildscripts/scons.py
+mongo-configure ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	__set_branch_value $__mongo_branch;
+	
+	#add enterprise module 
+	echo "modules $__modules"
+	if [ $__modules == "enterprise" ]; then
+		${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+		${__cmd_prefix} mkdir -p src/mongo/db/modules/
+		${__cmd_prefix} git clone git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise
+	fi
+
+	__mongo-configure-ninja $@;
+	__mongo-configure-compilation-db $@ )
+}
+
+#downloag last LTS and last continuous version of mongo to enable multiversion local testing
+mongo-enable-multiversion()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} db-contrib-tool setup-repro-env --linkDir ./build/install/bin/  --installLastLTS --installLastContinuous )
+}
+
+
+# Builds all the executables. If the `build.ninja` or `compile_commands.json`
+# file is missing (e.g. at first run), it is automatically generated. Source
+# files are also formatted before being compiled.
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+#   - Compiler family: --clang (default), --gcc
+#   - Compiling mode: --debug (default), --release
+#   - Linking mode: --dynamic (default), --static
+#   - Executables to build: --all (default), --core
+#   - Code formatting: --format (default), --no-format
+#   - All those of ninja
+mongo-build ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+
+	[[ ${__format} == 1 ]] && ${__cmd_prefix} mongo-format ${__mongo_branch};
+
+	if [[ ${__isv44plus} == true ]]; then
+			[[ -f build.ninja ]] || __mongo-configure-ninja $@;
+			[[ -f compile_commands.json ]] || __mongo-configure-compilation-db $@;
+			${__cmd_prefix} ninja -j${JOBS} generated-sources install-${__target} ${__args[@]}
+	else
+			[[ -f compile_commands.json ]] || __mongo-configure-compilation-db $@;
+			__mongo-check-venv;
+			${__cmd_prefix} ./buildscripts/scons.py --variables-files=$MONGO_VARIABLE_PATH ${__build_mode} "$ICECC_VAR" generated-sources ${__target} ${__args[@]}
+	fi
+	)
+}
+
+mongo-reset-vscode-settings()
+{
+	#copy vs code settings
+	cp -r $HOME/.config/workspace/envs/mongo/.vscode/ .
+}
+
+# Runs the unit tests.
+mongo-unit()
+{
+	( set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+		__mongo-check-mrlog;
+
+		if [[ -n $1 ]]; 
+		then
+			${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +${1}
+		else
+			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- buildscripts/resmoke.py run --jobs=12 --suite=unittests
+		fi
+	)
+}
+
+# Runs the benchmark test 
+mongo-benchmark()
+{
+	__mongo-parse-args $@;
+	( set -e;
+		[ -z "$1" ] && echo "Usage: mongo-benchmark <benchmark_name>" && return 1
+		${__cmd_prefix} ninja -j400 ./build/install/bin/$1 && ./build/install/bin/$1 --benchmark_out_format=csv --benchmark_out="./$1.csv"
+
+		#open csv if visual studio code terminal is used
+		[[ "$TERM_PROGRAM" == "vscode" ]] && ${__cmd_prefix} code -r ./$1.csv
+	)
+}
+
+# Deletes all files generated by running `mongo-build` function (i.e.
+# executables and object files). However, it does not delete the files
+# corresponding to the build configuration (i.e. `build.ninja` and
+# `compile_commands.json`).
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+#   - Compiler family: --clang (default), --gcc
+#   - Executables to delete: --all (default), --core
+#   - All those of buildscripts/scons.py
+mongo-clean ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+
+	if [[ ${__isv44plus} == true ]]; then
+			${__cmd_prefix} ninja -t clean;
+			${__cmd_prefix} ccache -c
+	else
+			__mongo-check-venv;
+			${__cmd_prefix} ./buildscripts/scons.py --variables-files=$MONGO_VARIABLE_PATH --clean ${__target}
+	fi
+	)
+}
+
+# Formats the source code according to the conversion adopted by all development
+# teams.
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+#   - All those of buildscripts/clang_format.py
+mongo-format ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args $@;
+
+	if [[ ${__isv44plus} == true ]]; then
+		${__cmd_prefix} ./buildscripts/clang_format.py format-my
+	else
+		${__cmd_prefix} ./buildscripts/clang_format.py format
+	fi
+	)
+}
+
+
+mongo-lint-check ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args $@;
+	__mongo_variable_path;
+
+	${__cmd_prefix} ./buildscripts/scons.py --variables-files=$MONGO_VARIABLE_PATH lint
+	)
+}
+
+
+# Runs on the current machine the infrastructure to process the specified
+# JavaScript test. This proposes the last commit comment as a description of the
+# patch, however it also allows to provide a custom message.
+#
+# Options:
+#   - Concurrency: --single-task (default), --multi-task
+#   - All those of buildscripts/resmoke.py
+mongo-test-locally ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args --master $@;
+
+	${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log ;
+	set +e;
+	${__cmd_prefix} ./buildscripts/resmoke.py run \
+			--storageEngine=wiredTiger \
+			--storageEngineCacheSizeGB=0.5 \
+			--mongodSetParameters='{logComponentVerbosity: {verbosity: 3}}' \
+			--jobs=${__tasks} \
+			--log=file \
+			${__args[@]} 
+
+	testresult=$?
+
+	#run mrlog if it exists
+	__mongo-check-mrlog && ${__cmd_prefix} mrlog tests.log > mrtests.log
+	if [[ "$TERM_PROGRAM" == "vscode" ]]; then
+  		( [[ -f mrtests.log ]] && ${__cmd_prefix} code -r mrtests.log ) || 
+		( [[ -f tests.log ]] && ${__cmd_prefix} code -r tests.log )
+	fi
+
+	return ${testresult}
+			
+	)
+}
+
+# Creates a new Evergreen path where it is possible to select the specific
+# suites to run. By default, all required suites are pre-selected.
+#
+# Options:
+#   - All those of evergreen patch
+mongo-test-remotely ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	
+	if [ -z "${__args[0]}" ]; then
+		__load_branch_description
+		msg=$__description
+		if [[ ${__cmd_prefix} != echo ]]; then
+			echo ${msg};
+			read -p "Do you want change the title of this Evergreen patch? [y/N] ";
+			if [[ ${REPLY} =~ (y|Y) ]]; then
+				read -p "Type the custom title: " msg;
+			fi;
+		fi;
+
+		${__cmd_prefix} evergreen patch \
+				--project mongodb-mongo-${__mongo_branch} \
+				--skip_confirm \
+				--description "$(git branch --show-current) ${msg}" \
+				${__args[@]} 
+		[ -n "$__modules" ] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-test-remotely --$__modules <patch_id>"
+	else
+		if [ $__modules == "enterprise" ]; then
+			[ -d ./src/mongo/db/modules/enterprise ] || ("echo 'Enterprise module not found" && return 1);
+			cd ./src/mongo/db/modules/enterprise
+			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[0]}
+			cd - 
+		else
+			echo "You must specify a valid module when using a patch id, module specified: $__modules"
+		fi
+	fi
+	)
+}
+
+#Note: this function could be just added as part of mongo-test-remotely
+#However, since the --project option changes, it would become more complex. 
+#Therefore, I decided to keep it separate.
+mongo-workload()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args $@;
+
+	if [ -z "${__args[0]}" ]; then
+		${__cmd_prefix} evergreen patch -p sys-perf
+		echo "COPY THE ID OF THE PATCH AND RUN: mongo-workload <patch_id>"
+	else
+		[ -d ~/mongo-tools/workload ] || git clone git@github.com:10gen/workloads.git ~/mongo-tools/workload
+		${__cmd_prefix} cd ~/mongo-tools/workload; git pull origin master #update the workloads
+		${__cmd_prefix} evergreen set-module -m workloads -i ${__args[0]} #add the workloads to the patch
+		${__cmd_prefix} cd - 
+	fi
+	)
+
+}
+
+
+################################################################################
+
+mongo-merge ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+		
+	if [ -z "${__args[0]}" ]; then
+		echo "ciao"
+		__pause=;
+		[ -n "$__modules" ] && __pause=" --pause";
+		${__cmd_prefix} evergreen commit-queue merge --project mongodb-mongo-${__mongo_branch} ${__args[@]} $__pause
+
+		[ -n "$__modules" ] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-merge --$__modules <patch_id>"
+	else 
+		if [ $__modules == "enterprise" ]; then
+			[ -d ./src/mongo/db/modules/enterprise ] || ( echo "Enterprise module not found" && return 1 );
+			${__cmd_prefix} cd ./src/mongo/db/modules/enterprise
+			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[0]} -m enterprise 
+			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[0]}
+			${__cmd_prefix} cd - 
+		fi;
+
+	fi;
+	)
+}
+
+mongo-set-branch()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	
+	__load_branch_value
+	echo "mongo-branch-value, before: ${MONGO_WORKDIR_BRANCH}"
+
+	__set_branch_value $__mongo_branch
+
+	# show it to the user
+	echo "mongo-branch-value, after: ${MONGO_WORKDIR_BRANCH}"
+
+	)
+}
+
+mongo-debug ()
+{
+	( set -e;
+	__mongo-parse-args $@;
+	__mongo_variable_path 
+	__load_branch_value
+	echo __cmd_prefix=${__cmd_prefix};
+	echo __mongo_branch=${__mongo_branch};
+	echo __isv44plus=${__isv44plus};
+	echo __toolchain=${__toolchain};
+	echo __build_mode=${__build_mode};
+	echo __link_model=${__link_model};
+	echo __format=${__format};
+	echo __target=${__target};
+	echo __tasks=${__tasks};
+	echo __modules=${__modules};
+	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
+	echo "MONGO_WORKDIR_BRANCH=${MONGO_WORKDIR_BRANCH}"
+	echo "ICECC_VAR=${ICECC_VAR}"
+	echo "CCACHE_VAR=${CCACHE_VAR}"
+    echo "JOBS=${JOBS}"
+	echo __args=${__args} )
+}
+
+################################################################################
+
+###
+### Global settings
+###
+
+MONGO_VENV_DIRNAME=${MONGO_VENV_DIRNAME:-'.venv'}
+ICECC_VAR="ICECC=icecc"
+CCACHE_VAR="CCACHE=ccache"
+JOBS=400
+
+#do not set icecc if command is not found
+if ! command -v icecc &> /dev/null; then
+	ICECC_VAR=""
+fi
+
+#set homebrew path for ccache in case of macos
+[ -n "$_is_macos" ] && CCACHE_VAR="CCACHE=/opt/homebrew/bin/ccache"
+
+###
+### Internal functions
+###
+
+__mongo_variable_path ()
+{	
+	MONGO_TOOLCHAIN_VER="v4"
+	case ${__mongo_branch} in
+		v4.0)
+			MONGO_TOOLCHAIN_VER="v2";;
+		v4.2)
+			MONGO_TOOLCHAIN_VER="v3";;
+		v4.4)
+			MONGO_TOOLCHAIN_VER="v3";;
+		v5.0)
+			MONGO_TOOLCHAIN_VER="v3";;
+		v6.0)
+			MONGO_TOOLCHAIN_VER="v3";;
+		*)
+			MONGO_TOOLCHAIN_VER="v4";;
+	esac
+
+	MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH:-"etc/scons/mongodbtoolchain_${MONGO_TOOLCHAIN_VER}_${__toolchain}.vars"}
+	if [ -n "$_is_macos" ]; then
+		MONGO_VARIABLE_PATH="etc/scons/xcode_macosx.vars"
+		[ -n "$_is_arm" ] && MONGO_VARIABLE_PATH="etc/scons/xcode_macosx_arm.vars"
+	fi
+}
+
+__mongo-check-mrlog()
+{
+    if ! [ "$(command -v mrlog)" ]; then
+        echo "mrlog not found, please install mrlog or run `mongo-setup` )."
+        return 1
+    fi
+
+	return 0
+}
+
+__mongo-check-wrkdir ()
+{
+	if [[ ! -d buildscripts ]]; then
+		echo "ERROR: ${PWD} is not a mongo working directory" 1>&2;
+		return 1;
+	fi
+}
+
+__mongo-check-venv ()
+{
+	if [[ -z ${VIRTUAL_ENV} ]]; then
+		if [[ -d ./${MONGO_VENV_DIRNAME} ]]; then
+			echo "NOTE: Implicit activation of Python virtual environment";
+			. ${MONGO_VENV_DIRNAME}/bin/activate;
+		else
+			echo "ERROR: No Python virtual environment to activate" 1>&2;
+			return 1;
+		fi
+	fi
+}
+
+__mongo-parse-args ()
+{
+	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
+
+	__cmd_prefix=;
+	__load_branch_value
+	__mongo_branch=$MONGO_WORKDIR_BRANCH;
+	__isv44plus=true;
+	__toolchain=clang;
+	__build_mode='--opt=off --dbg=on';
+	__link_model='--link-model=dynamic';
+	__format=1;
+	__target=all;
+	__tasks=1;
+	__modules=;
+	__args=();
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			--echo)
+				__cmd_prefix=echo;
+				shift
+			;;
+			--local)
+				ICECC_VAR=""
+                JOBS=12
+				shift
+			;;
+			--master)
+				__mongo_branch=master;
+				shift
+			;;
+			--v3.*) # v3.6, v3.6.3, etc
+				echo "ERROR: v3.x is not supported anymore"
+				return 1
+				shift
+			;;
+			--v4.0)
+				__isv44plus=false;
+				__mongo_branch=v4.0;
+				shift
+			;;
+			--v4.2)
+				__isv44plus=false;
+				__mongo_branch=v4.2;
+				shift
+			;;
+			--v*)
+				__mongo_branch=${1#*--}
+				shift
+			;;
+			--master)
+				__mongo_branch=master;
+				shift
+			;;
+			--clang)
+				__toolchain=clang;
+				shift
+			;;
+			--gcc)
+				__toolchain=gcc;
+				shift
+			;;
+			--debug)
+				__build_mode='--opt=off --dbg=on';
+				shift
+			;;
+			--benchmark)
+				__build_mode='--opt=on --dbg=on';
+				shift
+			;;
+			--sanitize-address)
+				__build_mode='--opt=on --dbg=on --sanitize=address --allocator=system';
+				shift
+			;;
+			--sanitize-thread)
+				__build_mode='--opt=on --dbg=on --sanitize=thread';
+				shift
+			;;
+			--release)
+				__build_mode='--opt=on --dbg=off';
+				shift
+			;;
+			--dynamic)
+				__link_model='--link-model=dynamic';
+				shift
+			;;
+			--static)
+				__link_model='--link-model=static';
+				shift
+			;;
+			--format)
+				__format=1;
+				shift
+			;;
+			--no-format)
+				__format=0;
+				shift
+			;;
+			--all)
+				__target=all;
+				shift
+			;;
+			--core)
+				__target=core;
+				shift
+			;;
+			--mono-task)
+				__tasks=1;
+				shift
+			;;
+			--multi-task)
+				__tasks=`cat /proc/cpuinfo | grep processor | wc -l`;
+				shift
+			;;
+			--enterprise)
+				__modules="enterprise";
+				shift
+			;;
+			*)
+				__args+=($1);
+				shift
+			;;
+		esac;
+	done;
+}
+
+#add last folder to the path
+default_branch_file="./mongo-branch-value"
+__load_branch_value()
+{
+
+	# if we don't have a file, we choose master
+	if [ ! -f "$default_branch_file" ]; then
+		MONGO_WORKDIR_BRANCH="master"
+
+	# otherwise read the value from the file
+	else
+		MONGO_WORKDIR_BRANCH=$(cat "$default_branch_file")
+	fi
+}
+__set_branch_value()
+{
+	MONGO_WORKDIR_BRANCH=$1
+	# and save it for next time
+	echo "${MONGO_WORKDIR_BRANCH}" > "$default_branch_file"
+}
+
+description_file="./mongo-branch-description"
+__load_branch_description()
+{
+	# if we don't have a file, we choose master
+	if [ ! -f "$description_file" ]; then
+		__description="no description"
+
+	# otherwise read the value from the file
+	else
+		__description=$(cat "$description_file")
+	fi
+}
+
+__set_branch_description()
+{
+	__description=$1
+	echo "${__description}" > "$description_file"
+}
+
+__mongo-configure-ninja ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+
+	if [[ ${__isv44plus} == true ]]; then
+			${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH ${__build_mode} ${__link_model} \
+					--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
+	fi 
+	)
+}
+
+__mongo-configure-compilation-db ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+	if [[ ${__isv44plus} == true ]]; then
+			${__cmd_prefix} ninja compiledb \
+					${__args[@]}
+	else
+		__mongo-check-venv;
+		${__cmd_prefix} ./buildscripts/scons.py --variables-files=$MONGO_VARIABLE_PATH ${__build_mode} "$ICECC_VAR" compiledb ${__args[@]}
+	fi
+	)
+}

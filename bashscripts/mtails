@@ -1,0 +1,142 @@
+#!/bin/bash
+
+TMUX=$(type -p tmux) || { echo "This script requires tmux"; exit 1; }
+SESSION="tmux-tail-f-$$"
+__istmux=false;
+__jcolor_cmd="python $HOME/.config/workspace/envs/mongo/bashscripts/jcolor.py"
+
+function __at_exit() {
+    if [ $__istmux = true ]; then
+        echo "Killing tmux session $SESSION"
+	    tmux kill-session -t "$SESSION" >/dev/null 2>&1
+    else
+        echo "Not in tmux - nothing to do"
+    fi
+}
+
+trap __at_exit EXIT
+
+function __tmux_split_and_cmd(){
+    #$1 cmd 
+    #$2 pane name 
+
+    tmux split-window -t "$SESSION" "source .venv/bin/activate && $1"
+    if [ $? -ne 0 ]; then
+        tmux select-layout -t "$SESSION" tiled
+        tmux split-window -t "$SESSION" "source .venv/bin/activate && $1" #retry
+    fi
+
+    if [ $? -eq 0 ]; then
+        tmux  select-pane -T "$2"
+    fi
+}
+
+function watch()
+{
+    __tmux_split_and_cmd "mongo --port 20018 --eval ./watch.js" "watch"
+}
+
+function multi_mode()
+{   
+    tmux new-session -d -s "$SESSION"
+    tmux set -g pane-border-status top
+    tmux set -g mouse on        #For tmux version 2.1 and up
+    __istmux=true
+
+    if [ -z $__dir ] && echo "Please specify a directory"; then
+        exit 1;
+    fi
+
+    #for every folder in __dir run tmux with tail -F on mongod.log
+    for d in "$__dir"/*; do
+        if [ -d "$d" ]; then
+            for subdir in "$d"/*; do
+                if [ -f "$subdir/mongod.log" ]; then
+                    echo "Tailing $subdir/mongod.log"
+                    __tmux_split_and_cmd "tail -F $subdir/mongod.log | $__jcolor_cmd" "$subdir"
+                fi
+            done
+        fi
+    done
+
+    __tmux_split_and_cmd "tail -f $__dir/mongos.log | $__jcolor_cmd " "mongos"
+
+    tmux select-layout -t "$SESSION" tiled
+    tmux select-pane -t "$SESSION" -t 0
+    tmux attach -t "$SESSION" >/dev/null 2>&1
+}
+
+function __single_mode()
+{
+    echo "heeere"
+    #for every folder in __dir run tmux with tail -F on mongod.log
+    for d in "$__dir"/*; do
+        if [ -d "$d" ]; then
+            for subdir in "$d"/*; do
+                if [ -f "$subdir/mongod.log" ]; then
+                    echo "Tailing $subdir/mongod.log"
+                    tail -F $subdir/mongod.log | $__jcolor_cmd &
+                fi
+            done
+        fi
+    done
+
+    tail -f $__dir/mongos.log &
+}
+
+#NOT WORKING YET
+function single_mode()
+{
+    if [ -z $__dir ] && echo "Please specify a directory"; then
+        exit 1;
+    fi
+
+    tmux new-session -d -s "$SESSION"
+    tmux set -g pane-border-status top
+    tmux set -g mouse on        #For tmux version 2.1 and up
+    __istmux=true
+
+    __tmux_split_and_cmd "$HOME/.config/workspace/envs/mongo/bashscripts/__single_mode $__dir" "unified logs"
+
+    tmux select-layout -t "$SESSION" main-vertical
+    tmux select-pane -t "$SESSION" -t 0
+    tmux attach -t "$SESSION" >/dev/null 2>&1
+}
+
+__parse_args()
+{
+	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
+
+	__config="$__volume/configs/bt/basic.json";
+    __dir=;
+    __cmd=;
+	__args=();
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			--multi)          
+                __cmd=multi_mode;
+                shift
+            ;;
+            --single)
+                __cmd=single_mode;
+                shift
+            ;;
+            --dir)
+                __dir=$2;
+                shift 2
+            ;;
+            --exit)
+                __cmd=__at_exit;
+                shift
+            ;;
+            
+		esac;
+	done;
+
+}
+
+#parse and execute
+__parse_args $@
+$__cmd
+

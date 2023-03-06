@@ -1,0 +1,11 @@
+
+_current_folder=$(pwd)
+. $_current_folder/.mongo-functions
+
+. $_current_folder/.mongo-tools
+
+. $_current_folder/.mongo-utils
+
+. $_current_folder/.mongo-aliases
+
+

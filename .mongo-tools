@@ -1,0 +1,64 @@
+
+alias icecc-check="icecream-sundae -s iceccd.production.build.10gen.cc"
+
+_mongo_tools="$HOME/mongo-tools"
+
+#setups your working station with the required tools to work with mongo
+mongo-setup-tools()
+{	
+	command -v npm >/dev/null 2>&1 || { echo >&2 "I require npm but it's not installed.  Aborting."; return 1; }
+	command -v cargo >/dev/null 2>&1 || { echo >&2 "I require cargo but it's not installed.  Aborting."; return 1; }
+
+	mkdir -p "$_mongo_tools"
+	
+	#install lobster
+    if [[ ! -d ""$_mongo_tools"/lobster" ]]; then
+        git clone https://github.com/evergreen-ci/lobster.git "$_mongo_tools"/lobster
+        cd "$_mongo_tools"/lobster
+        npm install;
+        npm run build;
+    fi
+
+	#install mrlog 
+    if [[ ! -d ""$_mongo_tools"/mrlog" ]]; then
+        git clone https://github.com/markbenvenuto/mrlog.git "$_mongo_tools"/mrlog
+        cd "$_mongo_tools"/mrlog
+        cargo install --path .
+    fi 
+
+    #install icecc-sundae
+    if [[ -n "$_is_macos" ]]; then
+        brew install icecream-sundae
+    elif [[ -n "$_is_ubuntu" ]]; then
+        sudo apt-get install icecream-sundae
+    fi
+
+	#install mark-benvenuto extension
+    _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
+    if [[ ! -d "$_mark_benvenuto_extesion_path" ]]; then
+       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path
+        cd $_mark_benvenuto_extesion_path
+        npm install && npm run compile
+        [ -d "$HOME/.vscode/extensions" ] && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
+        [ -d "$HOME/.vscode-server/extensions" ] && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
+    fi
+
+    #install db-contrib-tool
+    if [[ ! -d ""$_mongo_tools"/db-contrib-tool" ]]; then
+        git clone git@github.com:10gen/db-contrib-tool.git "$_mongo_tools"/db-contrib-tool
+    fi
+}
+
+mongo-update-tools()
+{
+    [ -d ""$_mongo_tools"" ] || { echo >&2 "I require "$_mongo_tools" but it's not installed. Please run mongo-setup-tools. Aborting."; return 1; }
+
+    _cws=$(pwd)
+    #for every folder in mongo-tools
+    for d in "$_mongo_tools"/*; do
+        [ -d "$d" ] || continue # if not a directory, skip
+        cd $d
+        git pull
+    done
+    cd $_cws
+}

@@ -1,0 +1,44 @@
+### Compute _os variable
+_os="Linux";
+
+case `uname` in
+    Darwin)
+        _os="Darwin"
+        _is_macos=1
+    ;;
+    Linux)
+        _os="Linux"
+        _is_linux=1
+    ;;
+    *)
+        echo "[ENV] Unsupported OS, impossible to setup"
+        return 1            
+    ;;
+esac
+
+if [[ $(uname -m) == 'arm64' ]]; then
+  _is_arm=1
+fi
+
+## Utility python ####
+#redifining cd to automatically activate python inside .venv
+cd ()
+{
+	builtin cd $@
+
+	# Check there is no virtual environment activated.
+	if [[ -z ${VIRTUAL_ENV} ]]; then
+		# If the .venv directory is found then activate the virtual
+		# environment.
+        if [ -d "./.venv" ]; then
+            source ./.venv/bin/activate
+        fi
+	else
+		# If the current directory does not belong to earlier VIRTUAL_ENV
+		# directory then deactivate the virtual environment.
+		PARENT_DIR=$(dirname ${VIRTUAL_ENV})
+		if [[ ${PWD}/ != ${PARENT_DIR}/* ]]; then
+			deactivate
+		fi
+	fi
+}
