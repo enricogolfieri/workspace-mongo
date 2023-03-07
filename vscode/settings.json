@@ -192,5 +192,10 @@
     "[javascript]": {
         "editor.defaultFormatter": "xaver.clang-format",
         "editor.formatOnSave": true,
+    },
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#1D312C",
+        "titleBar.activeBackground": "#29453E",
+        "titleBar.activeForeground": "#FAFCFB"
     }
 }

@@ -1,5 +1,5 @@
-## BashScript 
-any bash script inside this folder is added to your path
+# workscripts
+Repository of miscellaneous scripts to improve my MongoDB work productivity. Tailored specifically for my workflow, so might not be suitable for other engineers.
 
 # Local Machine
 `git clone git@github.com:enricogolfieri/workspace $HOME/.config/workspace-mongo`
@@ -20,6 +20,13 @@ Compilation on a mongodb virtual machine:
     1. include to .bashrc `source $HOME/.config/workspace/mongovm/.bashrc`
     2. install mongo utilities `mongo-setup-tools`
     3. install or update mongo toolchain `mongo-setup-toolchain`
+
+## BashScript 
+any bash script inside this folder is added to your path once you run `mongo-activate`
+
+## Ctools 
+Set of python tools to interact with a mongodb cluster 
+Requirements are installed in local repository virtual environment when you run `mongo-prepare`
 
 # Features:
 mongo-prepare <version>: prepare the environment for the project (note this will store the version in the config file and will be used for any command until you run another mongo-prepare or mongo-configure)

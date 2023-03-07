@@ -72,6 +72,9 @@ mongo-prepare ()
 	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
 	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
 	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+
+	#install ctools requirements
+	${MONGO_VENV_DIRNAME}/bin/python3  -m pip -r install $ctool_path/requirements.txt
 	
 	)
 
@@ -159,7 +162,7 @@ mongo-build ()
 mongo-reset-vscode-settings()
 {
 	#copy vs code settings
-	cp -r $HOME/.config/workspace/envs/mongo/.vscode/ .
+	cp -r $wsmdb_path/vscode/ .
 }
 
 # Runs the unit tests.
