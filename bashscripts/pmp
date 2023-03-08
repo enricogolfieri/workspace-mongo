@@ -4,10 +4,10 @@
 # for better readability.
 
 # How many times to sample the process
-NSAMPLES = 3
+NSAMPLES=3
 
 # How many seconds to sleep between samples
-SLEEP_BETWEEN_SAMPLES_SEC = 0
+SLEEP_BETWEEN_SAMPLES_SEC=0
 
 PID=$(pidof mongos)
 

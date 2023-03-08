@@ -1,11 +1,26 @@
 
-_current_folder=$(pwd)
-. $_current_folder/.mongo-functions
+ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+wsmdb_path=$(dirname "$ABSOLUTE_PATH")
 
-. $_current_folder/.mongo-tools
+function mongo-activate() 
+{
+    . $wsmdb_path/.mongo-dev-functions
 
-. $_current_folder/.mongo-utils
+    . $wsmdb_path/.mongo-tools
 
-. $_current_folder/.mongo-aliases
+    . $wsmdb_path/.mongo-utils
+
+    . $wsmdb_path/.mongo-evg-functions
+
+    source $wsmdb_path/.profile
+}
+
+function mongo-activate-docker()
+{
+    docker build --tag giulietta18 - < $wsmdb_path/Dockerfile
+
+    docker run -it --rm -v ~/.ssh:/root/.ssh giulietta18
+}
+alias rungiulietta="mongo-activate-docker"
 
 

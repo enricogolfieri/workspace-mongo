@@ -3,7 +3,8 @@
 export NINJA_STATUS='[%f/%t (%p) %es] '
 
 #add scripts
-export PATH=~/.config/workspace/envs/mongo/bashscripts:$PATH
+export PATH="$wsmdb_path"/bashscripts:$PATH
+export PATH="$ctools_path":$PATH
 
 [[ $- == *i* ]] || return
 

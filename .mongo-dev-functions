@@ -7,7 +7,9 @@
 #   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
 
 alias resmoke='python ./buildscripts/resmoke.py'
-
+_branch_name=$(git rev-parse --abbrev-ref HEAD)
+_key_version="$_branch_name"_v
+_key_description="$_branch_name"_d
 mongo-new-branch()
 {
 
@@ -25,7 +27,7 @@ mongo-new-branch()
 	${__cmd_prefix} git pull origin ${__mongo_branch} || ( echo "error occured while pulling from ${__mongo_branch}, please fix the error fist and try again" && return 1 );
 	${__cmd_prefix} git checkout -b ${__new_branch} || ( echo "error occured while creating new branch ${__new_branch}, please fix the error fist and try again" && return 1 );
 
-	${__cmd_prefix} __set_branch_description "$__description";
+	mongo-register-branch ${__new_branch} ${__description}
 
 	if [ "${__mongo_branch}" != "$MONGO_WORKDIR_BRANCH" ]; then
 		${__cmd_prefix} mongo-prepare
@@ -100,7 +102,7 @@ mongo-configure ()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 
-	__set_branch_value $__mongo_branch;
+	sdb set "$_key_version" "$__mongo_branch";
 	
 	#add enterprise module 
 	echo "modules $__modules"
@@ -307,8 +309,7 @@ mongo-test-remotely ()
 	__mongo-parse-args $@;
 	
 	if [ -z "${__args[0]}" ]; then
-		__load_branch_description
-		msg=$__description
+		msg=$(sdb get "$_branch_name"_d || echo "No description");
 		if [[ ${__cmd_prefix} != echo ]]; then
 			echo ${msg};
 			read -p "Do you want change the title of this Evergreen patch? [y/N] ";
@@ -388,19 +389,18 @@ mongo-merge ()
 	)
 }
 
-mongo-set-branch()
+mongo-register-branch()
 {
 	( set -e;
-	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 	
-	__load_branch_value
-	echo "mongo-branch-value, before: ${MONGO_WORKDIR_BRANCH}"
+	[ -z "${__args[0]}" ] && echo "You must specify a description for the branch" && return 1;
 
-	__set_branch_value $__mongo_branch
-
-	# show it to the user
-	echo "mongo-branch-value, after: ${MONGO_WORKDIR_BRANCH}"
+	__description="${__args[@]}";
+	sdb set "$_key_version" "$__mongo_branch"
+	echo "Branch: $__mongo_branch"
+	sdb set "$_key_description" "$__description"
+	echo "Description: ${__args[@]}"
 
 	)
 }
@@ -410,7 +410,7 @@ mongo-debug ()
 	( set -e;
 	__mongo-parse-args $@;
 	__mongo_variable_path 
-	__load_branch_value
+
 	echo __cmd_prefix=${__cmd_prefix};
 	echo __mongo_branch=${__mongo_branch};
 	echo __isv44plus=${__isv44plus};
@@ -421,6 +421,7 @@ mongo-debug ()
 	echo __target=${__target};
 	echo __tasks=${__tasks};
 	echo __modules=${__modules};
+	echo __description=$(sdb get "$_key_description" || echo "No description");
 	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
 	echo "MONGO_WORKDIR_BRANCH=${MONGO_WORKDIR_BRANCH}"
 	echo "ICECC_VAR=${ICECC_VAR}"
@@ -513,8 +514,7 @@ __mongo-parse-args ()
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
 	__cmd_prefix=;
-	__load_branch_value
-	__mongo_branch=$MONGO_WORKDIR_BRANCH;
+	__mongo_branch=$(sdb get $_key_version || echo "master")
 	__isv44plus=true;
 	__toolchain=clang;
 	__build_mode='--opt=off --dbg=on';
@@ -633,40 +633,6 @@ __mongo-parse-args ()
 			;;
 		esac;
 	done;
-}
-
-#add last folder to the path
-default_branch_file="./mongo-branch-value"
-__load_branch_value()
-{
-
-	# if we don't have a file, we choose master
-	if [ ! -f "$default_branch_file" ]; then
-		MONGO_WORKDIR_BRANCH="master"
-
-	# otherwise read the value from the file
-	else
-		MONGO_WORKDIR_BRANCH=$(cat "$default_branch_file")
-	fi
-}
-__set_branch_value()
-{
-	MONGO_WORKDIR_BRANCH=$1
-	# and save it for next time
-	echo "${MONGO_WORKDIR_BRANCH}" > "$default_branch_file"
-}
-
-description_file="./mongo-branch-description"
-__load_branch_description()
-{
-	# if we don't have a file, we choose master
-	if [ ! -f "$description_file" ]; then
-		__description="no description"
-
-	# otherwise read the value from the file
-	else
-		__description=$(cat "$description_file")
-	fi
 }
 
 __set_branch_description()

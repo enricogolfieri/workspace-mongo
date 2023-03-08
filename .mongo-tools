@@ -9,14 +9,6 @@ mongo-setup-tools()
 	command -v cargo >/dev/null 2>&1 || { echo >&2 "I require cargo but it's not installed.  Aborting."; return 1; }
 
 	mkdir -p "$_mongo_tools"
-    
-	#install lobster
-    if [[ ! -d ""$_mongo_tools"/lobster" ]]; then
-        git clone https://github.com/evergreen-ci/lobster.git "$_mongo_tools"/lobster
-        cd "$_mongo_tools"/lobster
-        npm install;
-        npm run build;
-    fi
 
 	#install mrlog 
     if [[ ! -d ""$_mongo_tools"/mrlog" ]]; then

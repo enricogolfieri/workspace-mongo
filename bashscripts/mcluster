@@ -58,45 +58,10 @@ init-minicluster()
 {
 	__enable_python_env
 
-	#if __watch is set, then launch a tmux session to watch the cluster
-	if [ -z "$__watch" ]; then
-		__init --replicaset --nodes 1 --sharded 2 $__args 
-	else
-		__init --replicaset --nodes 1 --sharded 2 --mongos 2 $__args 
-		$__cmd_prefix mtails watch 
-	fi
+	__init --replicaset --nodes 1 --sharded 2 $__args 
+
 }
 
-upload-data()
-{
-	__enable_python_env
-
-	if ! command -v mongoimport &> /dev/null
-	then
-		echo "mongoimport could not be found, please install mongoimport first (apt-get install mongo-tools)"
-		exit
-	fi
-	echo "Downloading the data, please wait..."
-	git clone git@github.com:neelabalan/mongodb-sample-dataset.git ./tmp_data 
-
-
-	cd ./tmp_data
-	echo "Uploading data to localhost:$__port"
-
-	for coll in *; do
-		if [ -d "${coll}" ] ; then
-			echo "$coll"
-			for file in $coll/*; do
-				mongoimport --drop --uri mongodb://127.0.0.1:27017/${coll} --file $file 
-			done
-		fi
-	done
-	cd - 
-
-	echo "Cleaning up"
-	rm -rf ./tmp_data 
-	echo "Done"
-}
 
 #3 nodes x 2 shards + 1 node csrs
 init-cluster()
@@ -120,6 +85,9 @@ connect()
 	$__cmd_prefix mongo --port $__port
 }
 
+tail()
+
+
 test()
 {
 	initd 
@@ -141,12 +109,7 @@ __launch()
 __init()
 {
 	echo "ready to init..."
-	if [ -n "$__watch" ]; then
-		__launch init --mongos 2 $@ 
-		$__cmd_prefix mtails watch 
-	else
-		__launch init $@ 
-	fi
+	__launch init $@ 
 }
 
 __enable_python_env()
@@ -173,20 +136,15 @@ __parse_args()
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
 	__cmd_prefix=;
-	__dir="~/.mcluster/cdata/"
+	__dir="$HOME/.mcluster/cdata/"
 	__cmd=;
 	__port=27017;
-	__watch=;
 	__args=();
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			--echo)
 				__cmd_prefix=echo;
-				shift
-			;;
-			--watch)
-				__watch=true;
 				shift
 			;;
 			--port)
