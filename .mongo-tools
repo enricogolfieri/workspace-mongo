@@ -2,6 +2,15 @@
 alias icecc-check="icecream-sundae -s iceccd.production.build.10gen.cc"
 
 _mongo_tools="$HOME/mongo-tools"
+ctool_path="$_mongo_tools"/kal/ctools
+
+mongo-setup-toolchain()
+{   
+    curl -o toolchain_installer.sh http://mongodbtoolchain.build.10gen.cc/installer.sh
+    bash toolchain_installer.sh
+    rm -rf ./toolchain_installer.sh
+}
+
 #setups your working station with the required tools to work with mongo
 mongo-setup-tools()
 {	
@@ -20,19 +29,20 @@ mongo-setup-tools()
     #install icecc-sundae
     if [[ -n "$_is_macos" ]]; then
         brew install icecream-sundae
-    elif [[ -n "$_is_ubuntu" ]]; then
+    elif [[ -n "$_is_linux" ]]; then
         sudo apt-get install icecream-sundae
     fi
 
 	#install mark-benvenuto extension
     _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
     if [[ ! -d "$_mark_benvenuto_extesion_path" ]]; then
-       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path
-        cd $_mark_benvenuto_extesion_path
+       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path && \
+        cd $_mark_benvenuto_extesion_path && \
         npm install && npm run compile
-        [ -d "$HOME/.vscode/extensions" ] && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
-        [ -d "$HOME/.vscode-server/extensions" ] && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
     fi
+
+    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
+    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
 
     #install db-contrib-tool
     if [[ ! -d ""$_mongo_tools"/db-contrib-tool" ]]; then
@@ -40,9 +50,8 @@ mongo-setup-tools()
     fi
 
     #install ctools from kal's workspace 
-    if [[ ! -d ""$_mongo_tools"/kal/ctools" ]]; then
+    if [[ ! -d "$ctool_path" ]]; then
         git clone https://github.com/kaloianm/workscripts.git "$_mongo_tools"/kal
-        ctool_path="$_mongo_tools"/kal/ctools
     fi
 }
 
@@ -57,5 +66,8 @@ mongo-update-tools()
         cd $d
         git pull
     done
+    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
+    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
     cd $_cws
 }
+

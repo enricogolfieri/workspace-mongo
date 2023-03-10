@@ -77,10 +77,3 @@ mongo-download-evg-logs() {
     scp -C ${_workstation}:${_logs_folder}/${_filename} .
 	open .
 }
-
-mongo-setup-toolchain()
-{   
-    curl -o toolchain_installer.sh http://mongodbtoolchain.build.10gen.cc/installer.sh
-    bash toolchain_installer.sh
-    rm -rf ./toolchain_installer.sh
-}

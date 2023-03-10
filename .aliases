@@ -17,9 +17,11 @@ function mongo-activate()
 
 function mongo-activate-docker()
 {
-    docker build --tag giulietta18 - < $wsmdb_path/Dockerfile
-
-    docker run -it --rm -v ~/.ssh:/root/.ssh giulietta18
+    docker build --tag giulietta18 - < $wsmdb_path/Dockerfile && \
+    docker run -it --rm -v ~/.ssh:/root/.ssh \
+    -v $wsmdb_path:/root/.config/workspace-mongo \
+    -v ~/.ssh:/root/.ssh \
+    giulietta18 
 }
 alias rungiulietta="mongo-activate-docker"
 
