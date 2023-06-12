@@ -310,7 +310,6 @@ mongo-run-patch ()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	__mongo-sdb-branch-name;
 
 	if [ -z "${__args[0]}" ]; then
 		_git_branch_name=$(git rev-parse --abbrev-ref HEAD)
@@ -497,7 +496,7 @@ __mongo-check-venv ()
 
 __mongo-set-branch() {
     local current_dir="$(basename "$PWD")"
-    local version_pattern="mongo-v([0-9]+)([0-9]+)"
+    local version_pattern="mongo-v([0-9]+)\.([0-9]+)"
     if [[ $current_dir =~ $version_pattern ]]; then
         local major_version="${BASH_REMATCH[1]}"
         local minor_version="${BASH_REMATCH[2]}"

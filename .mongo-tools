@@ -59,12 +59,25 @@ mongo-setup-tools()
     fi
 }
 
+_mongo_setup_old_repo()
+{   
+    local _ver=$1
+    local _folder=$HOME/mongo-$_ver
+
+    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
+
+    git clone git@github.com:10gen/mongo $_folder &&
+    cd $_folder &&
+    git checkout $_ver &&
+    cd $HOME
+}
+
 mongo-setup-repos()
 {
-    [ -d "~/mongo-v44" ] || git clone --depth 1 --branch v4.4  git@github.com:10gen/mongo ~/mongo-v44
-    [ -d "~/mongo-v50" ] || git clone --depth 1 --branch v5.0  git@github.com:10gen/mongo ~/mongo-v50
-    [ -d "~/mongo-v60" ] || git clone --depth 1 --branch v6.0  git@github.com:10gen/mongo ~/mongo-v60
-    [ -d "~/mongo-v70" ] || git clone --depth 1 --branch v7.0  git@github.com:10gen/mongo ~/mongo-v70
+    _mongo_setup_old_repo v4.4
+    _mongo_setup_old_repo v5.0
+    _mongo_setup_old_repo v6.0
+    _mongo_setup_old_repo v7.0
     [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
     [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
     [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
