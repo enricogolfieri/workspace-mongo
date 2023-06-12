@@ -86,8 +86,11 @@ while true; do
         "list")
             list_keys
             ;;
+        "print")
+            cat "$sdb_path"
+            ;;
         *)
-            echo "Usage: $0 get <key> | set <key> <value> | del <key> | list"
+            echo "Usage: $0 get <key> | set <key> <value> | del <key> | list | print"
             ;;
     esac
     if [[ $_interactive -eq 0 ]]; then

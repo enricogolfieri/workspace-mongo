@@ -85,8 +85,6 @@ connect()
 	$__cmd_prefix mongo --port $__port
 }
 
-tail()
-
 
 test()
 {

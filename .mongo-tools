@@ -30,8 +30,12 @@ mongo-setup-tools()
     if [[ -n "$_is_macos" ]]; then
         brew install icecream-sundae
     elif [[ -n "$_is_linux" ]]; then
-        sudo apt-get install icecream-sundae
+        sudo snap install icecream-sundae
     fi
+
+    #configure europe icecc scheduler
+    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=iceccd.production.build.10gen.cc/g /etc/icecc/icecc.conf
+    sudo service iceccd restart
 
 	#install mark-benvenuto extension
     _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
@@ -53,6 +57,17 @@ mongo-setup-tools()
     if [[ ! -d "$ctool_path" ]]; then
         git clone https://github.com/kaloianm/workscripts.git "$_mongo_tools"/kal
     fi
+}
+
+mongo-setup-repos()
+{
+    [ -d "~/mongo-v44" ] || git clone --depth 1 --branch v4.4  git@github.com:10gen/mongo ~/mongo-v44
+    [ -d "~/mongo-v50" ] || git clone --depth 1 --branch v5.0  git@github.com:10gen/mongo ~/mongo-v50
+    [ -d "~/mongo-v60" ] || git clone --depth 1 --branch v6.0  git@github.com:10gen/mongo ~/mongo-v60
+    [ -d "~/mongo-v70" ] || git clone --depth 1 --branch v7.0  git@github.com:10gen/mongo ~/mongo-v70
+    [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
+    [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
+    [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
 }
 
 mongo-update-tools()

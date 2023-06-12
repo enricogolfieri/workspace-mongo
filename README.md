@@ -10,7 +10,7 @@ Local compilation on macos or linux:
     2. type `mongo-activate` for every shell to enable the environment
     3. install utilities tool `mongo-setup-tools`
 
-Note: when you build locally, you will use the version of ninja, ccache, gcc, python etc installed in your system. There is no guarantee this will actually work.
+Note: when you build locally, you will use the version of ninja, ccache, clang, python etc installed in your system. There is no guarantee this will actually work.
 You can still install the toolchain by running mongo-setup-toolchain but I would not recommend it.
 
 # Virtual Machine AWS
