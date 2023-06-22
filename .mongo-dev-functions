@@ -15,10 +15,8 @@ mongo-new-branch()
 	__mongo-parse-args $@;
 
 	__new_branch=$1
-	__description=$2
 
 	[[ -z ${__new_branch} ]] && echo "new branch name is required" && return 1;
-	[[ -z ${__description} ]] && echo "branch description is required" && return 1;
 
 	${__cmd_prefix} git checkout  ${__mongo_branch} || ( echo "error occured while moving to ${__mongo_branch}, please fix the error fist and try again" && return 1 );
 	${__cmd_prefix} git pull origin ${__mongo_branch} || ( echo "error occured while pulling from ${__mongo_branch}, please fix the error fist and try again" && return 1 );
@@ -48,18 +46,9 @@ mongo-prepare ()
 	${__cmd_prefix} \git clean -fdx --exclude=".vscode/*";
 	${__cmd_prefix} ccache -C;
 
-	case ${__mongo_branch} in
-		v4.0)
-			${__cmd_prefix} \virtualenv -p python2 ${MONGO_VENV_DIRNAME};
-			${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-			${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python2 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
-		;;
-		*)
-			${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
-			${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-			${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
-		;;
-	esac 
+	${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
 
 	#install db-contrib-tools
 	${MONGO_VENV_DIRNAME}/bin/python3  -m pip install pipx
@@ -68,8 +57,7 @@ mongo-prepare ()
 	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
 
 	#install ctools requirements
-	#${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r $ctool_path/requirements.txt
-	
+	#${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r $_ctool_path/requirements.txt
 	)
 
 }
@@ -207,17 +195,6 @@ mongo-clean ()
 	)
 }
 
-mongo-free-memory()
-{	
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-
-	${__cmd_prefix} rm -rf /tmp/* 
-	${__cmd_prefix} rm -rf ./dump*
-	)
-}
-
 # Formats the source code according to the conversion adopted by all development
 # teams.
 #
@@ -317,8 +294,9 @@ mongo-run-patch ()
 		if [[ ${__cmd_prefix} != echo ]]; then
 			echo ${msg};
 			read -p "Do you want change the title of this Evergreen patch? [y/N] ";
-			if [[ ${REPLY} =~ (y|Y) ]]; then
-				read -p "Type the custom title: " msg;
+			if [[ ${REPLY} =~ (y|Y|yes) ]]; then
+				read -p "Type the custom title: " _input_description;
+				msg="$_git_branch_name $_input_description"
 			fi;
 		fi;
 
@@ -354,10 +332,9 @@ mongo-run-patch-workload()
 
 	if [ -z "${__args[0]}" ]; then
 		${__cmd_prefix} evergreen patch -p sys-perf
-		echo "COPY THE ID OF THE PATCH AND RUN: mongo-workload <patch_id>"
+		echo "COPY THE ID OF THE PATCH AND RUN: mongo-run-patch-workload <patch_id>"
 	else
-		[ -d ~/mongo-tools/workload ] || git clone git@github.com:10gen/workloads.git $_mongo_tools/workload
-		${__cmd_prefix} cd $_mongo_tools/workload; git pull origin master #update the workloads
+		${__cmd_prefix} cd $HOME/workload; git pull origin master #update the workloads
 		${__cmd_prefix} evergreen set-module -m workloads -i ${__args[0]} #add the workloads to the patch
 		${__cmd_prefix} cd - 
 	fi

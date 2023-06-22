@@ -1,9 +1,4 @@
 
-alias icecc-check="icecream-sundae -s iceccd.production.build.10gen.cc"
-
-_mongo_tools="$HOME/mongo-tools"
-ctool_path="$_mongo_tools"/kal/ctools
-
 mongo-setup-toolchain()
 {   
     curl -o toolchain_installer.sh http://mongodbtoolchain.build.10gen.cc/installer.sh
@@ -34,7 +29,7 @@ mongo-setup-tools()
     fi
 
     #configure europe icecc scheduler
-    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=iceccd.production.build.10gen.cc/g /etc/icecc/icecc.conf
+    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=$_icecc_cloud/g /etc/icecc/icecc.conf
     sudo service iceccd restart
 
 	#install mark-benvenuto extension
@@ -54,33 +49,9 @@ mongo-setup-tools()
     fi
 
     #install ctools from kal's workspace 
-    if [[ ! -d "$ctool_path" ]]; then
-        git clone https://github.com/kaloianm/workscripts.git "$_mongo_tools"/kal
+    if [[ ! -d "$_ctool_path" ]]; then
+        git clone https://github.com/kaloianm/workscripts.git "$_ctool_path"
     fi
-}
-
-_mongo_setup_old_repo()
-{   
-    local _ver=$1
-    local _folder=$HOME/mongo-$_ver
-
-    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
-
-    git clone git@github.com:10gen/mongo $_folder &&
-    cd $_folder &&
-    git checkout $_ver &&
-    cd $HOME
-}
-
-mongo-setup-repos()
-{
-    _mongo_setup_old_repo v4.4
-    _mongo_setup_old_repo v5.0
-    _mongo_setup_old_repo v6.0
-    _mongo_setup_old_repo v7.0
-    [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
-    [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
-    [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
 }
 
 mongo-update-tools()
@@ -98,4 +69,62 @@ mongo-update-tools()
     mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
     cd $_cws
 }
+
+mongo-setup-repos()
+{
+    _mongo_setup_old_repo v4.4
+    _mongo_setup_old_repo v5.0
+    _mongo_setup_old_repo v6.0
+    _mongo_setup_old_repo v7.0
+    [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
+    [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
+    [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
+
+    #install workload
+    if [[ ! -d "$HOME/workload" ]]; then
+        git clone git@github.com:10gen/workloads.git $HOME/workload
+    fi
+}
+
+mongo-setup-dsi()
+{
+    git clone git@github.com:10gen/dsi ~/dsi
+    cd ~/dsi 
+
+    ./run-dsi setup || ( echo "error running setup" && return 1 );
+
+    #install legacy terraform (not supported by brew)
+    _link=;
+    if [[ -n "$_is_linux" ]] ; then
+        if [[ -n "$_is_arm" ]] ; then 
+            _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_arm.zip"
+        else
+            _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip"
+        fi
+    elif [[ -n "$_is_macos" ]] ; then
+        _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_darwin_amd64.zip"
+    fi
+
+    #~/dsi/dsi_venv/bin is added to $PATH after setup
+    curl $_link -d ~/dsi/dsi_venv/bin
+
+    brew install awscli
+
+    echo "Done! please now run ./run-dsi onboarding and follow instructions"
+}
+
+## private
+_mongo_setup_old_repo()
+{   
+    local _ver=$1
+    local _folder=$HOME/mongo-$_ver
+
+    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
+
+    git clone git@github.com:10gen/mongo $_folder &&
+    cd $_folder &&
+    git checkout $_ver &&
+    cd $HOME
+}
+
 

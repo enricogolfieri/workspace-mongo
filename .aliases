@@ -1,12 +1,13 @@
-
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 wsmdb_path=$(dirname "$ABSOLUTE_PATH")
 
 function mongo-activate() 
 {
-    . $wsmdb_path/.mongo-dev-functions
+    . $wsmdb_path/.mongo-config #must be first
 
-    . $wsmdb_path/.mongo-tools
+    . $wsmdb_path/.mongo-setup
+
+    . $wsmdb_path/.mongo-dev-functions
 
     . $wsmdb_path/.mongo-utils
 
@@ -14,5 +15,3 @@ function mongo-activate()
 
     source $wsmdb_path/.profile
 }
-
-

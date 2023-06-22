@@ -1,24 +1,20 @@
-### Compute _os variable
-_os="Linux";
+alias icecc-check="icecream-sundae -s $_icecc_cloud"
 
-case `uname` in
-    Darwin)
-        _os="Darwin"
-        _is_macos=1
-    ;;
-    Linux)
-        _os="Linux"
-        _is_linux=1
-    ;;
-    *)
-        echo "[ENV] Unsupported OS, impossible to setup"
-        return 1            
-    ;;
-esac
+function venv()
+{
+    #activate if exist otherwise create it 
+    if [ -d "./.venv" ]; then
+        source ./.venv/bin/activate
+    else
+        python3 -m venv ./.venv || (echo "Failed to create virtual environment" && return 1);
+    fi
+}
 
-if [[ $(uname -m) == 'arm64' ]]; then
-  _is_arm=1
-fi
+mongo-free-memory()
+{	
+	rm -rf /tmp/* 
+	rm -rf ~/mongo*/dump*
+}
 
 ## Utility python ####
 #redifining cd to automatically activate python inside .venv
@@ -42,3 +38,4 @@ cd ()
 		fi
 	fi
 }
+
