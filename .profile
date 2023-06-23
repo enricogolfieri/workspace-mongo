@@ -35,6 +35,10 @@ if [ -d "$HOME/.local/bin" ]; then
     export PATH="$HOME/.local/bin:$PATH"
 fi
 
+if [ -d "/snap/bin" ]; then 
+    export PATH="/snap/bin:$PATH"
+fi
+
 #This will also overwrite your local python3
 if [ -d "/opt/mongodbtoolchain" ]; then
     export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
