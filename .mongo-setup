@@ -1,0 +1,130 @@
+
+mongo-setup-toolchain()
+{   
+    curl -o toolchain_installer.sh http://mongodbtoolchain.build.10gen.cc/installer.sh
+    bash toolchain_installer.sh
+    rm -rf ./toolchain_installer.sh
+}
+
+#setups your working station with the required tools to work with mongo
+mongo-setup-tools()
+{	
+	command -v npm >/dev/null 2>&1 || { echo >&2 "I require npm but it's not installed.  Aborting."; return 1; }
+	command -v cargo >/dev/null 2>&1 || { echo >&2 "I require cargo but it's not installed.  Aborting."; return 1; }
+
+	mkdir -p "$_mongo_tools"
+
+	#install mrlog 
+    if [[ ! -d ""$_mongo_tools"/mrlog" ]]; then
+        git clone https://github.com/markbenvenuto/mrlog.git "$_mongo_tools"/mrlog
+        cd "$_mongo_tools"/mrlog
+        cargo install --path .
+    fi 
+
+    #install icecc-sundae
+    if [[ -n "$_is_macos" ]]; then
+        brew install icecream-sundae
+    elif [[ -n "$_is_linux" ]]; then
+        sudo snap install icecream-sundae
+    fi
+
+    #configure europe icecc scheduler
+    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=$_icecc_cloud/g /etc/icecc/icecc.conf
+    sudo service iceccd restart
+
+	#install mark-benvenuto extension
+    _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
+    if [[ ! -d "$_mark_benvenuto_extesion_path" ]]; then
+       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path && \
+        cd $_mark_benvenuto_extesion_path && \
+        npm install && npm run compile
+    fi
+
+    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
+    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
+
+    #install db-contrib-tool
+    if [[ ! -d ""$_mongo_tools"/db-contrib-tool" ]]; then
+        git clone git@github.com:10gen/db-contrib-tool.git "$_mongo_tools"/db-contrib-tool
+    fi
+
+    #install ctools from kal's workspace 
+    if [[ ! -d "$_ctool_path" ]]; then
+        git clone https://github.com/kaloianm/workscripts.git "$_ctool_path"
+    fi
+}
+
+mongo-update-tools()
+{
+    [ -d ""$_mongo_tools"" ] || { echo >&2 "I require "$_mongo_tools" but it's not installed. Please run mongo-setup-tools. Aborting."; return 1; }
+
+    _cws=$(pwd)
+    #for every folder in mongo-tools
+    for d in "$_mongo_tools"/*; do
+        [ -d "$d" ] || continue # if not a directory, skip
+        cd $d
+        git pull
+    done
+    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
+    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
+    cd $_cws
+}
+
+mongo-setup-repos()
+{
+    _mongo_setup_old_repo v4.4
+    _mongo_setup_old_repo v5.0
+    _mongo_setup_old_repo v6.0
+    _mongo_setup_old_repo v7.0
+    [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
+    [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
+    [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
+
+    #install workload
+    if [[ ! -d "$HOME/workload" ]]; then
+        git clone git@github.com:10gen/workloads.git $HOME/workload
+    fi
+}
+
+mongo-setup-dsi()
+{
+    git clone git@github.com:10gen/dsi ~/dsi
+    cd ~/dsi 
+
+    ./run-dsi setup || ( echo "error running setup" && return 1 );
+
+    #install legacy terraform (not supported by brew)
+    _link=;
+    if [[ -n "$_is_linux" ]] ; then
+        if [[ -n "$_is_arm" ]] ; then 
+            _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_arm.zip"
+        else
+            _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_linux_amd64.zip"
+        fi
+    elif [[ -n "$_is_macos" ]] ; then
+        _link="https://releases.hashicorp.com/terraform/0.12.31/terraform_0.12.31_darwin_amd64.zip"
+    fi
+
+    #~/dsi/dsi_venv/bin is added to $PATH after setup
+    curl $_link -d ~/dsi/dsi_venv/bin
+
+    brew install awscli
+
+    echo "Done! please now run ./run-dsi onboarding and follow instructions"
+}
+
+## private
+_mongo_setup_old_repo()
+{   
+    local _ver=$1
+    local _folder=$HOME/mongo-$_ver
+
+    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
+
+    git clone git@github.com:10gen/mongo $_folder &&
+    cd $_folder &&
+    git checkout $_ver &&
+    cd $HOME
+}
+
+

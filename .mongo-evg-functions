@@ -1,0 +1,79 @@
+function mongo-get-failing-tests() {
+    local _patch_id="$1"
+    local _api_key=$(grep "api_key:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//')
+    local _api_user=$(grep "user:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//')
+    local _color_purple="\033[1;35m"
+    local _color_end="\033[0m"
+
+    echo -e "evergreen    patch: [${_color_purple}${_patch_id}${_color_end}]" >&2
+    echo -e "evergreen  api_key: [${_color_purple}${_api_key}${_color_end}]" >&2
+    echo -e "evergreen api_user: [${_color_purple}${_api_user}${_color_end}]" >&2
+    printf "%0.s-" {1..80} >&2 && echo >&2
+
+    # Get tasks and exclude the execution tasks themselves, getting only the general ones
+    curl --silent \
+         -H "Api-Key: ${_api_key}"  \
+         -H "Api-User: ${_api_user}" \
+         "https://evergreen.mongodb.com/api/rest/v2/versions/${_patch_id}/annotations" \
+        | jq -r '.[].task_id' \
+        | grep -v '_\d_.*patch' \
+        | while read task_id; do
+        sleep 0.1
+        local task_name=$(curl --silent \
+                                -H "Api-Key: ${_api_key}" \
+                                -H "Api-User: ${_api_user}" \
+                                "https://evergreen.mongodb.com/rest/v2/tasks/${task_id}" \
+                               | jq -r '(.display_name + "\t" + .build_variant)')
+        sleep 0.5
+
+        # Obtain test results per file and normalize pathnames
+        curl --silent \
+             -H "Api-Key: ${_api_key}" \
+             -H "Api-User: ${_api_user}" \
+             "https://evergreen.mongodb.com/rest/v2/tasks/${task_id}/tests?status=fail" \
+            | jq -r '.[].test_file' \
+            | sed 's_\\_/_g' \
+            | while read test_file; do
+            echo -e "${test_file}\t${task_name}"
+        done
+    done
+}
+
+function mongo-group-failing-tests() {
+    local _patch_id="$1"
+    local _color_red="\033[1;31m"
+    local _color_green="\033[1;32m"
+    local _color_yellow="\033[1;33m"
+    local _color_end="\033[0m"
+
+    if [[ $# -ne 1 ]]; then
+        echo "Error: incorrect number of arguments" >&2
+        echo "Usage: ${FUNCNAME[0]} <patch_id>" >&2 && return 1
+    fi
+
+    mongo-get-failing-tests "${_patch_id}" \
+        | sort \
+        | awk '{if ((exists[$1]++) == 1) {print        \
+          "'"${_color_red}"'"    $1 "\n  "             \
+          "'"${_color_green}"'"  $2                    \
+          " / "                                        \
+          "'"${_color_yellow}"'" $3 "'"${_color_end}"'"\
+          }}'
+}
+
+#download $1 log link into your workstation and then to your laptop
+mongo-download-evg-logs() {
+    _workstation="mongo-ws"
+    _logs_url=$1
+	_logs_folder="$HOME/tmp"
+
+    _filename=${_logs_url##*/}
+
+    ssh ${_workstation} "cd $_logs_folder; wget -q -O ${_filename} $1"
+    if [ $? -ne 0 ]; then
+         return 1;
+    fi;
+
+    scp -C ${_workstation}:${_logs_folder}/${_filename} .
+	open .
+}

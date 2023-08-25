@@ -1,0 +1,227 @@
+#!/bin/bash
+ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
+
+kill() {
+	__enable_python_env
+  echo "About to kill all processes" 
+  __launch kill 
+}
+
+help(){
+    echo
+    echo -e "\033[1;4;32m""Functions:""\033[0;34m"
+    compgen -A function
+    echo
+    echo -e "\033[1;4;32m""Aliases:""\033[0;34m"
+    compgen -A alias
+    echo
+    echo -e "\033[0m"
+}
+
+list()
+{
+	__enable_python_env
+	__launch list
+}
+
+clean() {
+  kill
+  echo "erasing data on $__dir"
+  $__cmd_prefix rm -rf $__dir
+}
+
+launch()
+{
+	__enable_python_env
+	__launch $__args 
+}
+
+init()
+{
+	__enable_python_env
+	__init
+}
+
+initd()
+{
+	__enable_python_env
+	__init --single 
+}
+
+init-replica()
+{
+	__enable_python_env
+	__init --replicaset --nodes 3
+}
+
+#1 nodes x 2 shards + 1 node csrs
+init-minicluster()
+{
+	__enable_python_env
+
+	__init --replicaset --nodes 1 --sharded 2 $__args 
+
+}
+
+#3 nodes x 2 shards + 1 node csrs
+init-cluster()
+{
+	__enable_python_env
+	__init --replicaset --nodes 3 --sharded 2 $__args 
+}
+
+#3 nodes x 2 shards + 3 node csrs
+init-bigcluster()
+{
+	__enable_python_env
+	__init --replicaset --nodes 3 --sharded 2 --csrs $__args 
+}
+
+connect()
+{
+	echo "connecting to $__args"
+
+	__enable_python_env
+	if [[ -n "$__port" ]] then;
+		$__cmd_prefix mongo --port $__port
+	else
+		$__cmd_prefix mongo --port $__args
+}
+
+
+test()
+{
+	initd 
+	$__cmd_prefix mongo --eval $1
+}
+
+#create symlink to playground folder in current directory
+pg-init()
+{
+	mkdir -p $_playground_dir
+	cp -a -n "$ws_playground_dir/." $_playground_dir
+	ln -s $_playground_dir .
+}
+
+# list playgrounds
+pg-ls()
+{
+	ls $_playground_dir || echo "No playgrounds found, please run mcluster pg-init first"
+}
+
+#create new playground
+add-pg()
+{
+	[ -z $1 ] && echo "Create new playground mcluster add-pg <name with no format>"
+	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
+
+	local _file_name="$1.mongodb.js"
+	for file in $_playground_dir/*; do
+		#check if file is a directory
+		if [ -d "$file" ]; then
+			#check if file is a directory and has the same name as the one passed as argument
+			if [ "$file" == "$_playground_dir/$_file_name" ]; then
+				echo "Playground $1 already exists"
+				return 1
+			fi
+		fi
+	done
+	cp $_playground_dir"/template.mongodb.js" $_playground_dir/$_file_name && echo "Created new playground $_file_name"
+}
+
+#remove playground
+rm-pg()
+{
+	[ -z $1 ] && echo "Remove playground mcluster rm-pg <name with no format>"
+	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
+
+	local _file_name="$1.mongodb.js"
+	for file in $_playground_dir/*; do
+		#check if file is a directory
+		if [ -d "$file" ]; then
+			#check if file is a directory and has the same name as the one passed as argument
+			if [ "$file" == "$_playground_dir/$1" ]; then
+				rm -rf $_playground_dir/$_file_name
+				echo "Removed playground $_file_name"
+			fi
+		fi
+	done
+	echo "Playground $_file_name does not exist"
+	return 1
+}
+#private ----------------------------------------
+
+__launch()
+{
+	$__cmd_prefix mlaunch $@ --dir $__dir 
+}
+
+__init()
+{
+	echo "ready to init..."
+	__launch init $@ 
+}
+
+__enable_python_env()
+{
+	echo "enabling python env"
+	$__cmd_prefix . .venv/bin/activate
+}
+
+__set()
+{
+	#first argument it s one command , followings are arguments
+	if [ -z "$__cmd" ]; then 
+		__cmd=$1;
+	else
+		__args="$__args $1"
+	fi
+}
+
+__add_to_path ()
+{	
+	#add to PATH if not already there
+    if [[ "$PATH" =~ (^|:)"${1}"(:|$) ]]
+    then
+        return 0
+    fi
+    export PATH=${1}:$PATH
+}
+
+__parse_args()
+{
+	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
+
+	__add_to_path ./build/debug/install/bin
+	__add_to_path ./build/install/bin
+
+	__cmd_prefix=;
+	__dir="$HOME/.mcluster/cdata/"
+	_playground_dir="$HOME/.mcluster/pg"
+	__cmd=;
+	__port=27017;
+	__args=;
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			--echo)
+				__cmd_prefix=echo;
+				shift
+			;;
+			--port)
+				__port=$2;
+				shift 2
+			;;
+			*)
+				__set $1;
+				shift
+			;;
+		esac;
+	done;
+}
+
+__parse_args $@
+echo "ready to $__cmd"
+$__cmd
+echo "Stay committed"

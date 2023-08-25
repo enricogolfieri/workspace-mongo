@@ -1,0 +1,31 @@
+# JIRA Username
+export JIRA_USERNAME=enrico.golfieri@mongodb.com
+
+# ICECC cloud
+export _icecc_cloud="iceccd.production.build.10gen.cc" #europe
+
+# Env variables
+_mongo_tools="$HOME/mongo-tools"
+_ctool_path="$_mongo_tools"/ctools
+
+### Compute _os variable
+_os="Linux";
+
+case `uname` in
+    Darwin)
+        _os="Darwin"
+        _is_macos=1
+    ;;
+    Linux)
+        _os="Linux"
+        _is_linux=1
+    ;;
+    *)
+        echo "[ENV] Unsupported OS, impossible to setup"
+        return 1            
+    ;;
+esac
+
+if [[ $(uname -m) == 'arm64' ]]; then
+  _is_arm=1
+fi

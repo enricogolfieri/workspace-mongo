@@ -1,0 +1,16 @@
+wsmdb_path=~/.config/workspace-mongo
+
+function mongo-activate() 
+{
+    . $wsmdb_path/.mongo-config #must be first
+
+    . $wsmdb_path/.mongo-setup
+
+    . $wsmdb_path/.mongo-dev-functions
+
+    . $wsmdb_path/.mongo-utils
+
+    . $wsmdb_path/.mongo-evg-functions
+
+    source $wsmdb_path/.profile
+}

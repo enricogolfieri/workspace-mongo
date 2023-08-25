@@ -1,0 +1,99 @@
+#sdb = simple database
+#store key value pairs in a file and re-use them later in various scripts
+
+#usage: 
+#sdb set <key> <value> 
+#sdb get <key> 
+#sbd del <key> 
+#sdb list 
+
+#Note: this is not fast and not meant to be used for large data
+
+sdb_path="$HOME/.sdb"
+_interactive=0
+
+# Function to get the value of a key
+get_value () {
+    key=$1
+    value=$(grep "^$key=" "$sdb_path" | cut -d= -f2-)
+    [[ -z "$value" && $_interactive -eq 0 ]] && exit 1;
+    echo "$value";
+}
+
+# Function to set the value of a key
+set_key_value () {
+    key=$1
+    value=$2
+    del_key "$key" 2>/dev/null # Delete the key if it already exists
+    echo "$key=$value" >> "$sdb_path"
+}
+
+# Function to delete a key-value pair
+del_key () {
+    key=$1
+    sed -i "/^$key=/d" "$sdb_path"
+}
+
+# Function to list all keys
+list_keys () {
+    if [[ ! -s "$sdb_path" ]]; then
+        echo "No keys found"
+    else
+        echo "Keys:"
+        cut -d= -f1 "$sdb_path"
+    fi
+}
+
+# Check if the database file exists, create it if it doesn't
+if [[ ! -f "$sdb_path" ]]; then
+    touch "$sdb_path"
+fi
+
+# Check the command and call the appropriate function
+# Infinite loop to accept user input and execute commands
+while true; do
+    # Read user input
+    if [[ $_interactive -eq 1 ]]; then
+        read -p "Enter command: " command key value
+    else
+        command=$1
+        key=$2
+        value=$3
+    fi
+
+    case "$command" in
+        "-i")
+            # Interactive mode
+            _interactive=1
+            shift
+            ;;
+        "exit")
+            exit 0
+            "leaving, bye!"
+            ;;
+        "get")
+            [[ -z "$key" ]] && echo "Usage: $0 get <key>" && exit 1;
+            get_value "$key"
+            ;;
+        "set")
+            [[ -z "$value" || -z "$key" ]] && echo "Usage: $0 set <key> <value>" && exit 1;
+            set_key_value "$key" "$value"
+            ;;
+        "del")
+            [[ -z "$key" ]] && echo "Usage: $0 del <key>" && exit 1;
+            del_key "$key"
+            ;;
+        "list")
+            list_keys
+            ;;
+        "print")
+            cat "$sdb_path"
+            ;;
+        *)
+            echo "Usage: $0 get <key> | set <key> <value> | del <key> | list | print"
+            ;;
+    esac
+    if [[ $_interactive -eq 0 ]]; then
+        break
+    fi
+done
