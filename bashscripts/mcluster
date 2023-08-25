@@ -83,7 +83,10 @@ connect()
 	echo "connecting to $__args"
 
 	__enable_python_env
-	$__cmd_prefix mongo --port $__port
+	if [[ -n "$__port" ]] then;
+		$__cmd_prefix mongo --port $__port
+	else
+		$__cmd_prefix mongo --port $__args
 }
 
 

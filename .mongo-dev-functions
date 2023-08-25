@@ -5,7 +5,7 @@
 #
 # Options:
 #   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
-
+#!/bin/bash
 alias resmoke='python ./buildscripts/resmoke.py'
 mongo-new-branch()
 {
@@ -30,6 +30,21 @@ mongo-new-branch()
 
 }
 
+mongo-update-venv()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
+
+	#install db-contrib-tools
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install pipx
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+	)
+}
+
 mongo-prepare ()
 {
 	( set -e;
@@ -47,14 +62,8 @@ mongo-prepare ()
 	${__cmd_prefix} ccache -C;
 
 	${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
-	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
 
-	#install db-contrib-tools
-	${MONGO_VENV_DIRNAME}/bin/python3  -m pip install pipx
-	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
-	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
-	${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+	mongo-update-venv
 
 	#install ctools requirements
 	#${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r $_ctool_path/requirements.txt
@@ -85,13 +94,28 @@ mongo-configure ()
 	#add enterprise module 
 	echo "modules $__modules"
 	if [ $__modules == "enterprise" ]; then
-		${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-		${__cmd_prefix} mkdir -p src/mongo/db/modules/
-		${__cmd_prefix} git clone git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise
+		mongo-enable-enterprise
 	fi
 
 	__mongo-configure-ninja $@;
 	__mongo-configure-compilation-db $@ )
+}
+
+mongo-enable-enterprise()
+{
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} mkdir -p src/mongo/db/modules/
+	${__cmd_prefix} git clone --branch $__mongo_branch git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise
+}
+
+mongo-disable-enterprise()
+{
+	read -p "WARN: this will delete all the enterprise uncommitted changes, proceed? [y/N] ";
+	[[ ${REPLY} =~ (y|Y) ]] || return 0;
+	${__cmd_prefix} rm -rf src/mongo/db/modules/enterprise
 }
 
 #downloag last LTS and last continuous version of mongo to enable multiversion local testing
@@ -101,8 +125,11 @@ mongo-enable-multiversion()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 
+	#remove first "v" from __mongo_branch. In case is master => master, in case is vX.Y => X.Y
+	local version=${__mongo_branch#*v}
+	
 	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-	${__cmd_prefix} db-contrib-tool setup-repro-env --linkDir ./build/install/bin/  --installLastLTS --installLastContinuous )
+	${__cmd_prefix} db-contrib-tool setup-repro-env $version --linkDir ./build/install/bin/  --installLastLTS --installLastContinuous )
 }
 
 
@@ -226,6 +253,13 @@ mongo-lint-check ()
 	)
 }
 
+mongo-code-analysis()
+{
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	python3 buildscripts/iwyu/run_iwyu_analysis.py
+}
+
 ################################################################################# EVERGREEN PATCH ############################################################################################################
 # Runs on the current machine the infrastructure to process the specified
 # JavaScript test. This proposes the last commit comment as a description of the
@@ -234,31 +268,33 @@ mongo-lint-check ()
 # Options:
 #   - Concurrency: --single-task (default), --multi-task
 #   - All those of buildscripts/resmoke.py
-mongo-test-locally ()
+mongo-test-locally()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-check-venv;
-	__mongo-parse-args --master $@;
+	__mongo-parse-args $@;
 
 	${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log ;
 	set +e;
+	__mrlog_arg='--mrlog';
+	[ __mongo_branch == "v4.4" ] && __mrlog_arg=;
+
 	${__cmd_prefix} ./buildscripts/resmoke.py run \
 			--storageEngine=wiredTiger \
 			--storageEngineCacheSizeGB=0.5 \
 			--mongodSetParameters='{logComponentVerbosity: {verbosity: 3}}' \
 			--jobs=${__tasks} \
 			--log=file \
+			$__mrlog_arg\
 			${__args[@]} 
 
 	testresult=$?
 
-	#run mrlog if it exists
-	__mongo-check-mrlog && ${__cmd_prefix} mrlog tests.log > mrtests.log
-	if [[ "$TERM_PROGRAM" == "vscode" ]]; then
-  		( [[ -f mrtests.log ]] && ${__cmd_prefix} code -r mrtests.log ) || 
-		( [[ -f tests.log ]] && ${__cmd_prefix} code -r tests.log )
-	fi
+	mkdir -p ./.testdata
+	cp ./executor.log ./.testdata/executor.log
+	cp ./fixture.log ./.testdata/fixture.log
+	cp ./tests.log ./.testdata/tests.log
 
 	return ${testresult}
 			
@@ -287,7 +323,7 @@ mongo-run-patch ()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-
+	
 	if [ -z "${__args[0]}" ]; then
 		_git_branch_name=$(git rev-parse --abbrev-ref HEAD)
 		msg="$_git_branch_name No description"
@@ -331,7 +367,10 @@ mongo-run-patch-workload()
 	__mongo-parse-args $@;
 
 	if [ -z "${__args[0]}" ]; then
-		${__cmd_prefix} evergreen patch -p sys-perf
+		_sys_perf="sys-perf"
+		[ $__mongo_branch != "master" ] && 	_sys_perf="sys-perf-${__mongo_branch#*v}"
+
+		${__cmd_prefix} evergreen patch -p $_sys_perf
 		echo "COPY THE ID OF THE PATCH AND RUN: mongo-run-patch-workload <patch_id>"
 	else
 		${__cmd_prefix} cd $HOME/workload; git pull origin master #update the workloads
@@ -623,3 +662,16 @@ __mongo-configure-compilation-db ()
 	${__cmd_prefix} ninja compiledb ${__args[@]}
 	)
 }
+
+############################ git utils
+function checkout
+{
+	( 	
+		set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+		${__cmd_prefix} git checkout $__mongo_branch
+	)
+}
+
+alias amend="git commit --amend --no-edit"

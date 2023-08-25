@@ -1,5 +1,4 @@
-ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-wsmdb_path=$(dirname "$ABSOLUTE_PATH")
+wsmdb_path=~/.config/workspace-mongo
 
 function mongo-activate() 
 {

@@ -66,7 +66,6 @@ __parse_args()
 {
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
-	__config="$__volume/configs/bt/basic.json";
     __dir=;
     __cmd=;
 	__args=();
