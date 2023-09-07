@@ -83,10 +83,9 @@ connect()
 	echo "connecting to $__args"
 
 	__enable_python_env
-	if [[ -n "$__port" ]] then;
-		$__cmd_prefix mongo --port $__port
-	else
-		$__cmd_prefix mongo --port $__args
+	local port=$__args;
+	[[ -z $__args ]] && port=27017;
+	 $__cmd_prefix mongo --port $port && return 0;
 }
 
 
@@ -100,8 +99,7 @@ test()
 pg-init()
 {
 	mkdir -p $_playground_dir
-	cp -a -n "$ws_playground_dir/." $_playground_dir
-	ln -s $_playground_dir .
+	ln -s $ws_playground_dir .
 }
 
 # list playgrounds
@@ -200,7 +198,6 @@ __parse_args()
 	__dir="$HOME/.mcluster/cdata/"
 	_playground_dir="$HOME/.mcluster/pg"
 	__cmd=;
-	__port=27017;
 	__args=;
 
 	while [[ $# -gt 0 ]]; do
@@ -208,10 +205,6 @@ __parse_args()
 			--echo)
 				__cmd_prefix=echo;
 				shift
-			;;
-			--port)
-				__port=$2;
-				shift 2
 			;;
 			*)
 				__set $1;

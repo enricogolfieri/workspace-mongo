@@ -1,6 +1,6 @@
 wsmdb_path=~/.config/workspace-mongo
 
-function mongo-activate() 
+function mongo-load-aliases()
 {
     . $wsmdb_path/.mongo-config #must be first
 
@@ -11,6 +11,10 @@ function mongo-activate()
     . $wsmdb_path/.mongo-utils
 
     . $wsmdb_path/.mongo-evg-functions
+}
 
+function mongo-activate() 
+{
+    mongo-load-aliases
     source $wsmdb_path/.profile
 }

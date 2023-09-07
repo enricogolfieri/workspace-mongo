@@ -30,7 +30,18 @@ mongo-new-branch()
 
 }
 
-mongo-update-venv()
+_mongo_update_venv_poetry()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	${__cmd_prefix} python3 -m pip install 'poetry==1.5.1'
+	${__cmd_prefix} export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+	${__cmd_prefix} python3 -m poetry install --no-root --sync
+	)
+
+}
+_mongo_update_venv_pip()
 {
 	( set -e;
 	__mongo-check-wrkdir;
@@ -42,6 +53,29 @@ mongo-update-venv()
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+	)
+}
+mongo-update-venv()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	case ${__mongo_branch} in
+		v4.2)
+			_mongo_update_venv_pip;;
+		v4.4)
+			_mongo_update_venv_pip;;
+		v5.0)
+			_mongo_update_venv_pip;;
+		v6.0)
+			_mongo_update_venv_pip;;
+		v7.0)
+			_mongo_update_venv_pip;;
+		*)
+			_mongo_update_venv_poetry;;
+	esac
+
 	)
 }
 
@@ -190,7 +224,7 @@ mongo-benchmark()
 {
 	__mongo-parse-args $@;
 	( set -e;
-		[ -z "$1" ] && echo "Usage: mongo-benchmark <benchmark_name>" && return 1
+		[[ -z "$1" ]] && echo "Usage: mongo-benchmark <benchmark_name>" && return 1
 		${__cmd_prefix} ninja -j400 ./build/install/bin/$1 && 
 		${__cmd_prefix} ./build/install/bin/$1 --benchmark_out_format=csv --benchmark_out="./$1.csv"
 
@@ -278,14 +312,15 @@ mongo-test-locally()
 	${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log ;
 	set +e;
 	__mrlog_arg='--mrlog';
-	[ __mongo_branch == "v4.4" ] && __mrlog_arg=;
+	[[ __mongo_branch == "v4.4" ]] && __mrlog_arg="";
 
 	${__cmd_prefix} ./buildscripts/resmoke.py run \
 			--storageEngine=wiredTiger \
 			--storageEngineCacheSizeGB=0.5 \
-			--mongodSetParameters='{logComponentVerbosity: {verbosity: 3}}' \
+			--mongodSetParameters='{logComponentVerbosity: {verbosity: 2}}' \
 			--jobs=${__tasks} \
 			--log=file \
+			$__fcv_opts \
 			$__mrlog_arg\
 			${__args[@]} 
 
@@ -342,10 +377,10 @@ mongo-run-patch ()
 				-a required \
 				--description "$(git branch --show-current) ${msg}" \
 				${__args[@]} 
-		[ -n "$__modules" ] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-test-remotely --$__modules <patch_id>"
+		[[ -n "$__modules" ]] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-test-remotely --$__modules <patch_id>"
 	else
-		if [ $__modules == "enterprise" ]; then
-			[ -d ./src/mongo/db/modules/enterprise ] || ("echo 'Enterprise module not found" && return 1);
+		if [[ $__modules == "enterprise" ]]; then
+			[[ -d ./src/mongo/db/modules/enterprise ]] || ("echo 'Enterprise module not found" && return 1);
 			cd ./src/mongo/db/modules/enterprise
 			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[0]}
 			cd - 
@@ -366,9 +401,9 @@ mongo-run-patch-workload()
 	__mongo-check-venv;
 	__mongo-parse-args $@;
 
-	if [ -z "${__args[0]}" ]; then
+	if [[ -z "${__args[0]}" ]]; then
 		_sys_perf="sys-perf"
-		[ $__mongo_branch != "master" ] && 	_sys_perf="sys-perf-${__mongo_branch#*v}"
+		[[ $__mongo_branch != "master" ]] && 	_sys_perf="sys-perf-${__mongo_branch#*v}"
 
 		${__cmd_prefix} evergreen patch -p $_sys_perf
 		echo "COPY THE ID OF THE PATCH AND RUN: mongo-run-patch-workload <patch_id>"
@@ -389,16 +424,16 @@ mongo-merge ()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 		
-	if [ -z "${__args[0]}" ]; then
+	if [[ -z "${__args[0]}" ]]; then
 		echo "ciao"
 		__pause=;
-		[ -n "$__modules" ] && __pause=" --pause";
+		[[ -n "$__modules" ]] && __pause=" --pause";
 		${__cmd_prefix} evergreen commit-queue merge --project mongodb-mongo-${__mongo_branch} ${__args[@]} $__pause
 
-		[ -n "$__modules" ] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-merge --$__modules <patch_id>"
+		[[ -n "$__modules" ]] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-merge --$__modules <patch_id>"
 	else 
-		if [ $__modules == "enterprise" ]; then
-			[ -d ./src/mongo/db/modules/enterprise ] || ( echo "Enterprise module not found" && return 1 );
+		if [[ $__modules == "enterprise" ]]; then
+			[[ -d ./src/mongo/db/modules/enterprise ]] || ( echo "Enterprise module not found" && return 1 );
 			${__cmd_prefix} cd ./src/mongo/db/modules/enterprise
 			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[0]} -m enterprise 
 			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[0]}
@@ -424,6 +459,7 @@ mongo-debug ()
 	echo __target=${__target};
 	echo __tasks=${__tasks};
 	echo __modules=${__modules};
+	echo __fcv_opts=${__fcv_opts};
 	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
 	echo "ICECC_VAR=${ICECC_VAR}"
 	echo "CCACHE_VAR=${CCACHE_VAR}"
@@ -440,7 +476,7 @@ mongo-debug ()
 MONGO_VENV_DIRNAME=${MONGO_VENV_DIRNAME:-'.venv'}
 ICECC_VAR="ICECC=icecc"
 CCACHE_VAR="CCACHE=ccache"
-JOBS=400
+JOBS=300
 
 #do not set icecc if command is not found
 if ! command -v icecc &> /dev/null; then
@@ -448,7 +484,7 @@ if ! command -v icecc &> /dev/null; then
 fi
 
 #set homebrew path for ccache in case of macos
-[ -n "$_is_macos" ] && CCACHE_VAR="CCACHE=/opt/homebrew/bin/ccache"
+[[ -n "$_is_macos" ]] && CCACHE_VAR="CCACHE=/opt/homebrew/bin/ccache"
 
 ###
 ### Internal functions
@@ -458,8 +494,6 @@ __mongo_variable_path ()
 {	
 	MONGO_TOOLCHAIN_VER="v4"
 	case ${__mongo_branch} in
-		v4.0)
-			MONGO_TOOLCHAIN_VER="v2";;
 		v4.2)
 			MONGO_TOOLCHAIN_VER="v3";;
 		v4.4)
@@ -468,6 +502,8 @@ __mongo_variable_path ()
 			MONGO_TOOLCHAIN_VER="v3";;
 		v6.0)
 			MONGO_TOOLCHAIN_VER="v3";;
+		v7.0)
+			MONGO_TOOLCHAIN_VER="v4";;
 		*)
 			MONGO_TOOLCHAIN_VER="v4";;
 	esac
@@ -529,12 +565,13 @@ __mongo-parse-args ()
 	__mongo-set-branch;
 	__cmd_prefix=;
 	__toolchain=clang;
-	__build_mode='--opt=off --dbg=on';
+	__build_mode='--opt=on --dbg=on';
 	__link_model='--link-model=dynamic';
 	__format=1;
-	__target=all;
+	__target=devcore;
 	__tasks=1;
 	__modules=;
+	__test_extra_options=;
 	__args=();
 
 	while [[ $# -gt 0 ]]; do
@@ -623,6 +660,10 @@ __mongo-parse-args ()
 			;;
 			--enterprise)
 				__modules="enterprise";
+				shift
+			;;
+			--featureFlag*)
+				__fcv_opts="--additionalFeatureFlags=${1#*--}"
 				shift
 			;;
 			*)
