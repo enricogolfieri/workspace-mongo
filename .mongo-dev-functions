@@ -124,12 +124,6 @@ mongo-configure ()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	
-	#add enterprise module 
-	echo "modules $__modules"
-	if [ $__modules == "enterprise" ]; then
-		mongo-enable-enterprise
-	fi
 
 	__mongo-configure-ninja $@;
 	__mongo-configure-compilation-db $@ )
@@ -377,15 +371,12 @@ mongo-run-patch ()
 				-a required \
 				--description "$(git branch --show-current) ${msg}" \
 				${__args[@]} 
-		[[ -n "$__modules" ]] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-test-remotely --$__modules <patch_id>"
+		[[ -n "$__enterprise" ]] && echo "WARNING DETECTED ENTERPRISE - COPY THE ID OF THE PATCH AND RUN: mongo-run-patch <patch_id>"
 	else
-		if [[ $__modules == "enterprise" ]]; then
-			[[ -d ./src/mongo/db/modules/enterprise ]] || ("echo 'Enterprise module not found" && return 1);
+		if [[ $__enterprise == true ]]; then
 			cd ./src/mongo/db/modules/enterprise
 			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[0]}
 			cd - 
-		else
-			echo "You must specify a valid module when using a patch id, module specified: $__modules"
 		fi
 	fi
 	)
@@ -427,13 +418,12 @@ mongo-merge ()
 	if [[ -z "${__args[0]}" ]]; then
 		echo "ciao"
 		__pause=;
-		[[ -n "$__modules" ]] && __pause=" --pause";
+		[[ -n "$__enterprise" ]] && __pause=" --pause";
 		${__cmd_prefix} evergreen commit-queue merge --project mongodb-mongo-${__mongo_branch} ${__args[@]} $__pause
 
-		[[ -n "$__modules" ]] && echo "COPY THE ID OF THE PATCH AND RUN: mongo-merge --$__modules <patch_id>"
+		[[ -n "$__enterprise" ]] && echo "WARNING DETECTED ENTERPRISE - COPY THE ID OF THE PATCH AND RUN: mongo-merge <patch_id>"
 	else 
-		if [[ $__modules == "enterprise" ]]; then
-			[[ -d ./src/mongo/db/modules/enterprise ]] || ( echo "Enterprise module not found" && return 1 );
+		if [[ $__enterprise == true ]]; then
 			${__cmd_prefix} cd ./src/mongo/db/modules/enterprise
 			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[0]} -m enterprise 
 			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[0]}
@@ -458,7 +448,7 @@ mongo-debug ()
 	echo __format=${__format};
 	echo __target=${__target};
 	echo __tasks=${__tasks};
-	echo __modules=${__modules};
+	echo __enterprise=${__enterprise};
 	echo __fcv_opts=${__fcv_opts};
 	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
 	echo "ICECC_VAR=${ICECC_VAR}"
@@ -570,10 +560,12 @@ __mongo-parse-args ()
 	__format=1;
 	__target=devcore;
 	__tasks=1;
+	__enterprise=;
 	__modules=;
 	__test_extra_options=;
 	__args=();
 
+	[[ -d ./src/mongo/db/modules/enterprise ]] && __enterprise=true;
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			--echo)
@@ -658,10 +650,6 @@ __mongo-parse-args ()
 				__tasks=`cat /proc/cpuinfo | grep processor | wc -l`;
 				shift
 			;;
-			--enterprise)
-				__modules="enterprise";
-				shift
-			;;
 			--featureFlag*)
 				__fcv_opts="--additionalFeatureFlags=${1#*--}"
 				shift
@@ -688,6 +676,8 @@ __mongo-configure-ninja ()
 	__mongo-parse-args $@;
 	__mongo_variable_path
 
+	__modules=;
+	[[ -n "$__enterprise" ]] && __modules="enterprise";
 	${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH ${__build_mode} ${__link_model} \
 		--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
 	

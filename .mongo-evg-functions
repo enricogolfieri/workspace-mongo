@@ -1,7 +1,7 @@
 function mongo-get-failing-tests() {
     local _patch_id="$1"
-    local _api_key=$(grep "api_key:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//')
-    local _api_user=$(grep "user:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//')
+    local _api_key=$(grep "api_key:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//;s/"//g')
+    local _api_user=$(grep "user:" ~/.evergreen.yml | cut -d':' -f2 | sed 's/^[[:space:]]*//;s/"//g')
     local _color_purple="\033[1;35m"
     local _color_end="\033[0m"
 
