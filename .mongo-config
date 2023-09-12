@@ -1,9 +1,6 @@
 # JIRA Username
 export JIRA_USERNAME=enrico.golfieri@mongodb.com
 
-# ICECC cloud
-export _icecc_cloud="iceccd.production.build.10gen.cc" #europe
-
 # Env variables
 _mongo_tools="$HOME/mongo-tools"
 _ctool_path="$_mongo_tools"/ctools
@@ -28,4 +25,13 @@ esac
 
 if [[ $(uname -m) == 'arm64' ]]; then
   _is_arm=1
+  [ -n $_is_linux ] && _is_arm_linux=1
 fi
+
+#ICECC cloud
+if [[ -n $_is_arm_linux ]]; then
+    export _icecc_cloud="iceccd-graviton.production.build.10gen.cc" #arm64
+else
+    export _icecc_cloud="iceccd.production.build.10gen.cc" #x86
+fi
+

@@ -6,6 +6,19 @@ mongo-setup-toolchain()
     rm -rf ./toolchain_installer.sh
 }
 
+mongo-setup-icecc()
+{
+    #configure europe icecc scheduler
+    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=$_icecc_cloud/g /etc/icecc/icecc.conf
+    sudo service iceccd restart
+
+    if [[ -n "$_is_macos" ]]; then
+        brew install icecream-sundae
+    elif [[ -n "$_is_linux" ]]; then
+        sudo snap install --edge icecream-sundae
+    fi
+}
+
 #setups your working station with the required tools to work with mongo
 mongo-setup-tools()
 {	
@@ -20,17 +33,6 @@ mongo-setup-tools()
         cd "$_mongo_tools"/mrlog
         cargo install --path .
     fi 
-
-    #install icecc-sundae
-    if [[ -n "$_is_macos" ]]; then
-        brew install icecream-sundae
-    elif [[ -n "$_is_linux" ]]; then
-        sudo snap install icecream-sundae
-    fi
-
-    #configure europe icecc scheduler
-    sed -i s/ICECC_SCHEDULER_HOST=.*/ICECC_SCHEDULER_HOST=$_icecc_cloud/g /etc/icecc/icecc.conf
-    sudo service iceccd restart
 
 	#install mark-benvenuto extension
     _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
@@ -52,6 +54,9 @@ mongo-setup-tools()
     if [[ ! -d "$_ctool_path" ]]; then
         git clone https://github.com/kaloianm/workscripts.git "$_ctool_path"
     fi
+
+    #configure icecc
+    mongo-setup-icecc
 }
 
 mongo-update-tools()
@@ -76,9 +81,9 @@ mongo-setup-repos()
     _mongo_setup_old_repo v5.0
     _mongo_setup_old_repo v6.0
     _mongo_setup_old_repo v7.0
-    [ -d "~/mongo"] ||  git clone git@github.com:10gen/mongo ~/mongo
-    [ -d "~/mongo2"] ||  git clone git@github.com:10gen/mongo ~/mongo2
-    [ -d "~/mongo3"] ||  git clone git@github.com:10gen/mongo ~/mongo3
+    [ -d "~/mongo" ] ||  git clone git@github.com:10gen/mongo ~/mongo
+    [ -d "~/mongo2" ] ||  git clone git@github.com:10gen/mongo ~/mongo2
+    [ -d "~/mongo3" ] ||  git clone git@github.com:10gen/mongo ~/mongo3
 
     #install workload
     if [[ ! -d "$HOME/workload" ]]; then
