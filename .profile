@@ -39,12 +39,13 @@ if [ -d "/snap/bin" ]; then
     export PATH="/snap/bin:$PATH"
 fi
 
+# MongoDB Toolchain
 #This will also overwrite your local python3
 if [ -d "/opt/mongodbtoolchain" ]; then
     export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
 fi
 
-# MongoDB Toolchain
+#Do not print in case of non-interactive shell
 [[ $- == *i* ]] || return
 
 echo "mongo environment activated for $_os"

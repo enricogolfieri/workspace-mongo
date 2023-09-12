@@ -34,74 +34,141 @@ clean() {
 launch()
 {
 	__enable_python_env
-	__launch $__args 
+	__launch $@ 
 }
 
 init()
 {
 	__enable_python_env
-	__init
+	__init $@
 }
 
 initd()
 {
 	__enable_python_env
-	__init --single 
+	__init --single $@
 }
 
 init-replica()
 {
 	__enable_python_env
-	__init --replicaset --nodes 3
+	__init --replicaset --nodes 3 $@
 }
 
 #1 nodes x 2 shards + 1 node csrs
-init-minicluster()
+init-lite()
 {
 	__enable_python_env
 
-	__init --replicaset --nodes 1 --sharded 2 $__args 
+	__init --replicaset --nodes 1 --sharded 2 $@
 
-}
-
-#3 nodes x 2 shards + 1 node csrs
-init-cluster()
-{
-	__enable_python_env
-	__init --replicaset --nodes 3 --sharded 2 $__args 
 }
 
 #3 nodes x 2 shards + 3 node csrs
-init-bigcluster()
+init-cluster()
 {
 	__enable_python_env
-	__init --replicaset --nodes 3 --sharded 2 --csrs $__args 
+	__init --replicaset --nodes 3 --sharded 2 --config 3 $@
 }
 
+init-from-url()
+{
+	__enable_python_env
+	$_url=$__args[0]
+	[[ -z $_url ]] && echo "Please run mcluster init-from-url <url>" && return 1;
+	regex='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
+	if [[ $_url =~ $regex ]]; then
+		wget -O - $_url | tar xzvf - -C /tmp
+		init-from-dbpath "/tmp/data/db/job0/resmoke/"
+	else
+		echo "Invalid url"
+	fi
+}
+
+init-from-dbpath()
+{
+	#if cluster already present, ask for confirmation
+	__enable_python_env
+
+	echo "Checking if cluster already present in $__dir"
+	[[ -d $__dir ]] && read -p "Cluster already present, are you sure you want to overwrite it? [y/n]" && [[ $REPLY =~ ^[Yy]$ ]] || return 1;
+
+	clean
+	_dbpath=$1
+	[[ -z $_dbpath ]] && echo "Please run mcluster init-from-dbpath <dbpath>" && return 1;
+	__enable_python_env
+
+	_numshardnode=$(find $1/shard0 -maxdepth 1 -type d|wc -l)
+	_numshardnode=$(echo $_numshardnode -1 | bc )
+	_numshards=$(find $1/shard* -maxdepth 0 -type d|wc -l) 
+	_numcsrsnode=$(find $1/config* -maxdepth 1 -type d|wc -l)
+	_numcsrsnode=$(echo $_numcsrsnode -1 | bc )
+
+	#generate a 
+	__init --replicaset --nodes $_numshardnode --sharded $_numshards --config $_numcsrsnode $@
+	kill #kill all processes 
+	echo "Copying data from $_dbpath to $__dir"
+	for d in "$_dbpath"/*; do
+		#copy shards data
+		#check if d is config
+		if [[ $d == *"config"* ]]; then
+			#copy config data
+			for countc in $(seq 0 $_numcsrsnode); do
+				local countrs=$(echo $countc + 1 | bc);
+				local from_dir="$d/node$countc"
+				local to_dir="$__dir/configRepl/rs$countrs/db"
+				echo "Found $from_dir"
+				if [ -d "$from_dir" ]; then
+					echo "Copying from $from_dir to $to_dir"
+					cp -r $from_dir $to_dir
+				fi
+			done
+		else
+			for countn in $(seq 0 $_numshardnode); do
+				#move from dbpath/shard0/node0 to _dir/shard01/rs1/db 
+				#move from dbpath/shard0/node1 to _dir/shard01/rs2/db
+				#move from dbpath/shard1/node0 to _dir/shard02/rs1/db
+				#etc... 
+				local countrs=$(echo $countn + 1 | bc);
+				#get shard number: extract last number from string and remove leading zeros, then add 1
+				local counts=$(echo $d | grep -o '[0-9]\+' | tail -1)
+				local counts=$(echo $counts + 1 | bc);
+				local from_dir="$d/node$countn"
+				local to_dir="$__dir/shard0$counts/rs$countrs/db"
+				echo "Found $from_dir"
+				if [[ -d "$from_dir" ]]; then
+					echo "Copying from $from_dir to $to_dir"
+					cp -r $from_dir $to_dir
+				fi
+			done
+		fi
+	done
+
+	#start again cluster
+	start
+}
+
+start()
+{
+	__enable_python_env
+	__launch start --dir $__dir
+}
 connect()
 {
-	echo "connecting to $__args"
+	echo "connecting to $1"
 
 	__enable_python_env
-	if [[ -n "$__port" ]] then;
-		$__cmd_prefix mongo --port $__port
-	else
-		$__cmd_prefix mongo --port $__args
+	local port=$1;
+	[[ -z $1 ]] && port=27017;
+	 $__cmd_prefix mongo --port $port && return 0;
 }
 
-
-test()
-{
-	initd 
-	$__cmd_prefix mongo --eval $1
-}
 
 #create symlink to playground folder in current directory
 pg-init()
 {
 	mkdir -p $_playground_dir
-	cp -a -n "$ws_playground_dir/." $_playground_dir
-	ln -s $_playground_dir .
+	ln -s $ws_playground_dir .
 }
 
 # list playgrounds
@@ -200,7 +267,6 @@ __parse_args()
 	__dir="$HOME/.mcluster/cdata/"
 	_playground_dir="$HOME/.mcluster/pg"
 	__cmd=;
-	__port=27017;
 	__args=;
 
 	while [[ $# -gt 0 ]]; do
@@ -208,10 +274,6 @@ __parse_args()
 			--echo)
 				__cmd_prefix=echo;
 				shift
-			;;
-			--port)
-				__port=$2;
-				shift 2
 			;;
 			*)
 				__set $1;
@@ -223,5 +285,5 @@ __parse_args()
 
 __parse_args $@
 echo "ready to $__cmd"
-$__cmd
+$__cmd $__args
 echo "Stay committed"
