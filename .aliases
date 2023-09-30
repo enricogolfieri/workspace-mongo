@@ -1,20 +1,18 @@
-wsmdb_path=~/.config/workspace-mongo
-
 function mongo-load-aliases()
 {
-    . $wsmdb_path/.mongo-config #must be first
+    . $PWD/.mongo-config #must be first
 
-    . $wsmdb_path/.mongo-setup
+    . $PWD/.mongo-setup
 
-    . $wsmdb_path/.mongo-dev-functions
+    . $PWD/.mongo-dev-functions
 
-    . $wsmdb_path/.mongo-utils
+    . $PWD/.mongo-utils
 
-    . $wsmdb_path/.mongo-evg-functions
+    . $PWD/.mongo-evg-functions
 }
 
 function mongo-activate() 
 {
     mongo-load-aliases
-    source $wsmdb_path/.profile
+    source $PWD/.profile
 }

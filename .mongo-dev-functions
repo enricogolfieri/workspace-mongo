@@ -311,7 +311,7 @@ mongo-test-locally()
 	${__cmd_prefix} ./buildscripts/resmoke.py run \
 			--storageEngine=wiredTiger \
 			--storageEngineCacheSizeGB=0.5 \
-			--mongodSetParameters='{logComponentVerbosity: {verbosity: 2}}' \
+			--mongodSetParameters="$__log_component_verbosity" \
 			--jobs=${__tasks} \
 			--log=file \
 			$__fcv_opts \
@@ -450,6 +450,7 @@ mongo-debug ()
 	echo __tasks=${__tasks};
 	echo __enterprise=${__enterprise};
 	echo __fcv_opts=${__fcv_opts};
+	echo __log_component_verbosity=${__log_component_verbosity}
 	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
 	echo "ICECC_VAR=${ICECC_VAR}"
 	echo "CCACHE_VAR=${CCACHE_VAR}"
@@ -563,6 +564,7 @@ __mongo-parse-args ()
 	__enterprise=;
 	__modules=;
 	__test_extra_options=;
+	__log_component_verbosity='{logComponentVerbosity: {verbosity: 0}}'
 	__args=();
 
 	[[ -d ./src/mongo/db/modules/enterprise ]] && __enterprise=true;
@@ -580,6 +582,11 @@ __mongo-parse-args ()
 			--v3.*) # v3.6, v3.6.3, etc
 				echo "ERROR: v3.x is not supported anymore"
 				return 1
+				shift
+			;;
+			--verbose)
+				echo "eee"
+				__log_component_verbosity="'{logComponentVerbosity: {verbosity: 2}}'";
 				shift
 			;;
 			--v*)
