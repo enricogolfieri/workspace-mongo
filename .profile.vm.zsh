@@ -1,10 +1,18 @@
-#add mongofunction
 
-export NINJA_STATUS='[%f/%t (%p) %es] '
+
+. ./.mongo-vm-functions
+
+# JIRA Username
+export JIRA_USERNAME=enrico.golfieri@mongodb.com
+#ICECC cloud
+if [[ -n $_is_arm_linux ]]; then
+    export _icecc_cloud="iceccd-graviton.production.build.10gen.cc" #arm64
+else
+    export _icecc_cloud="iceccd.production.build.10gen.cc" #x86
+fi
 
 export PATH="/usr/local/sbin:/usr/sbin:/usr/bin:/bin:$PATH"
 #add scripts
-export PATH="$wsmdb_path"/bashscripts:$PATH
 export PATH="$ctools_path":$PATH
 
 ### Set general environment settings
@@ -38,15 +46,3 @@ fi
 if [ -d "/snap/bin" ]; then 
     export PATH="/snap/bin:$PATH"
 fi
-
-# MongoDB Toolchain
-#This will also overwrite your local python3
-if [ -d "/opt/mongodbtoolchain" ]; then
-    export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
-fi
-
-#Do not print in case of non-interactive shell
-[[ $- == *i* ]] || return
-
-echo "mongo environment activated for $_os"
-

@@ -118,6 +118,12 @@ mongo-setup-dsi()
     echo "Done! please now run ./run-dsi onboarding and follow instructions"
 }
 
+mongo-free-memory()
+{	
+	rm -rf /tmp/* 
+	rm -rf ~/mongo*/dump*
+}
+
 ## private
 _mongo_setup_old_repo()
 {   

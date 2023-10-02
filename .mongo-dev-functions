@@ -98,9 +98,6 @@ mongo-prepare ()
 	${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
 
 	mongo-update-venv
-
-	#install ctools requirements
-	#${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r $_ctool_path/requirements.txt
 	)
 
 }
