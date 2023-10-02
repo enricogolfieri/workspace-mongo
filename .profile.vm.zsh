@@ -1,6 +1,6 @@
 
 
-. ./.mongo-vm-functions
+source $mongows/.mongo-vm-functions
 
 # JIRA Username
 export JIRA_USERNAME=enrico.golfieri@mongodb.com

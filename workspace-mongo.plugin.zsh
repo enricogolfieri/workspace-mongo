@@ -1,10 +1,10 @@
-
+mongows=$(dirname "${(%):-%x}")
 function mongo-dev-activate() 
 {
-    . ./.profile.dev.zsh
+    . $mongows/.profile.dev.zsh
 }
 
 function mongo-vm-activate()
 {
-    . ./.profile.vm.zsh
+    . $mongows/.profile.vm.zsh
 }

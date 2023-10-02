@@ -1,9 +1,9 @@
 #add mongofunction
-source ./.mongo-dev-functions
-source ./.mongo-evg-functions
+source $mongows/.mongo-dev-functions
+source $mongows/.mongo-evg-functions
 
 # Env variables
-export PATH="$(realpath .)/bashscripts:$PATH"
+export PATH="$mongows/bashscripts:$PATH"
 _mongo_tools="$HOME/mongo-tools"
 _ctool_path="$_mongo_tools"/ctools
 
