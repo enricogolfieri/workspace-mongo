@@ -1,4 +1,19 @@
 
+todopr()
+{
+    echo "-create evg patch;\n-make sure all related tests pass;\n-link evg to pr\n-do we need backport?\n-close the ticket\n"
+}
+
+todohelp()
+{
+    echo "-you can prove your point, no need to be right, need to be proven\n-gather your proves\n-provide an explanation where proves are linked"
+}
+
+todobf()
+{
+    todohelp
+}
+
 mongo-setup-toolchain()
 {   
     curl -o toolchain_installer.sh http://mongodbtoolchain.build.10gen.cc/installer.sh

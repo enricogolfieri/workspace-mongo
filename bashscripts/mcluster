@@ -91,19 +91,22 @@ init-from-dbpath()
 	__enable_python_env
 
 	echo "Checking if cluster already present in $__dir"
-	[[ -d $__dir ]] && read -p "Cluster already present, are you sure you want to overwrite it? [y/n]" && [[ $REPLY =~ ^[Yy]$ ]] || return 1;
+	[[ -d $__dir ]] && ( read -p "Cluster already present, are you sure you want to overwrite it? [y/n]" && [[ $REPLY =~ ^[Yy]$ ]] || return 1 );
 
+	echo "about to clean"
 	clean
+	echo "cleaned"
 	_dbpath=$1
 	[[ -z $_dbpath ]] && echo "Please run mcluster init-from-dbpath <dbpath>" && return 1;
 	__enable_python_env
 
-	_numshardnode=$(find $1/shard0 -maxdepth 1 -type d|wc -l)
+	_numshardnode=$(find $1/shard0* -maxdepth 1 -type d|wc -l)
 	_numshardnode=$(echo $_numshardnode -1 | bc )
 	_numshards=$(find $1/shard* -maxdepth 0 -type d|wc -l) 
 	_numcsrsnode=$(find $1/config* -maxdepth 1 -type d|wc -l)
 	_numcsrsnode=$(echo $_numcsrsnode -1 | bc )
 
+	echo "Found nshard $_numshards with nodes $_numshardnode and csrs with nodes $_numcsrsnode"
 	#generate a 
 	__init --replicaset --nodes $_numshardnode --sharded $_numshards --config $_numcsrsnode $@
 	kill #kill all processes 

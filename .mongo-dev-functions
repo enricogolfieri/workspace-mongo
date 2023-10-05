@@ -351,14 +351,13 @@ mongo-run-patch ()
 	__mongo-parse-args $@;
 	
 	if [ -z "${__args[0]}" ]; then
-		_git_branch_name=$(git rev-parse --abbrev-ref HEAD)
-		msg="$_git_branch_name No description"
+		msg="No description"
 		if [[ ${__cmd_prefix} != echo ]]; then
 			echo ${msg};
 			read -p "Do you want change the title of this Evergreen patch? [y/N] ";
 			if [[ ${REPLY} =~ (y|Y|yes) ]]; then
 				read -p "Type the custom title: " _input_description;
-				msg="$_git_branch_name $_input_description"
+				msg="$_input_description"
 			fi;
 		fi;
 
@@ -366,7 +365,7 @@ mongo-run-patch ()
 				--project mongodb-mongo-${__mongo_branch} \
 				--skip_confirm \
 				-a required \
-				--description "$(git branch --show-current) ${msg}" \
+				--description "$(git branch --show-current):${msg}" \
 				${__args[@]} 
 		[[ -n "$__enterprise" ]] && echo "WARNING DETECTED ENTERPRISE - COPY THE ID OF THE PATCH AND RUN: mongo-run-patch <patch_id>"
 	else

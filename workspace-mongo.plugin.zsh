@@ -1,4 +1,4 @@
-mongows=$(dirname "${(%):-%x}")
+mongows=$HOME/.config/workspace-mongo
 function mongo-dev-activate() 
 {
     . $mongows/.profile.dev.zsh
