@@ -86,16 +86,16 @@ mongo-prepare ()
 	__mongo-parse-args $@;
 
 	if [[ ${__cmd_prefix} != echo ]]; then
-		echo "WARNING: All uncommitted changes and unversioned files will be lost";
-		read -p "Are you sure you want to proceed? [y/N] ";
-		[[ ${REPLY} =~ (y|Y) ]] || return 0;
+		echo "WARNING: All uncommitted changes and unversioned files will be lost,Are you sure you want to proceed? [y/N]"
+		read -r _reply
+		[[ ${_reply} =~ (y|Y) ]] || return 0;
 	fi
 
 	[[ -n ${VIRTUAL_ENV} ]] && ${__cmd_prefix} deactivate;
-	${__cmd_prefix} \git clean -fdx --exclude=".vscode/*";
+	${__cmd_prefix} git clean -fdx --exclude=".vscode/*";
 	${__cmd_prefix} ccache -C;
 
-	${__cmd_prefix} \python3 -m venv ${MONGO_VENV_DIRNAME};
+	${__cmd_prefix} python3 -m venv ${MONGO_VENV_DIRNAME};
 
 	mongo-update-venv
 	)
@@ -138,8 +138,9 @@ mongo-enable-enterprise()
 
 mongo-disable-enterprise()
 {
-	read -p "WARN: this will delete all the enterprise uncommitted changes, proceed? [y/N] ";
-	[[ ${REPLY} =~ (y|Y) ]] || return 0;
+	echo "WARN: this will delete all the enterprise uncommitted changes, proceed? [y/N] ";
+	read -r _reply;
+	[[ ${_reply} =~ (y|Y) ]] || return 0;
 	${__cmd_prefix} rm -rf src/mongo/db/modules/enterprise
 }
 
@@ -190,7 +191,7 @@ mongo-reset-vscode-settings()
 {
 	#copy vs code settings
 	mkdir -p .vscode
-	cp -r $wsmdb_path/vscode/* .vscode
+	cp -r $mongows/vscode/* .vscode
 }
 
 # Runs the unit tests.
@@ -303,7 +304,7 @@ mongo-test-locally()
 	${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log ;
 	set +e;
 	__mrlog_arg='--mrlog';
-	[[ __mongo_branch == "v4.4" ]] && __mrlog_arg="";
+	[[ "$__mongo_branch" == "v4.4" ]] && __mrlog_arg="";
 
 	${__cmd_prefix} ./buildscripts/resmoke.py run \
 			--storageEngine=wiredTiger \
@@ -353,10 +354,11 @@ mongo-run-patch ()
 	if [ -z "${__args[0]}" ]; then
 		msg="No description"
 		if [[ ${__cmd_prefix} != echo ]]; then
-			echo ${msg};
-			read -p "Do you want change the title of this Evergreen patch? [y/N] ";
-			if [[ ${REPLY} =~ (y|Y|yes) ]]; then
-				read -p "Type the custom title: " _input_description;
+			echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
+			read -r _reply;
+			if [[ ${_reply} =~ (y|Y|yes) ]]; then
+				echo "Type the custom title: " 
+				read -r _input_description;
 				msg="$_input_description"
 			fi;
 		fi;
@@ -390,7 +392,7 @@ mongo-run-patch-workload()
 
 	if [[ -z "${__args[0]}" ]]; then
 		_sys_perf="sys-perf"
-		[[ $__mongo_branch != "master" ]] && 	_sys_perf="sys-perf-${__mongo_branch#*v}"
+		[[ $__mongo_branch != "master" ]] && _sys_perf="sys-perf-${__mongo_branch#*v}"
 
 		${__cmd_prefix} evergreen patch -p $_sys_perf
 		echo "COPY THE ID OF THE PATCH AND RUN: mongo-run-patch-workload <patch_id>"
@@ -534,11 +536,11 @@ __mongo-check-venv ()
 }
 
 __mongo-set-branch() {
-    local current_dir="$(basename "$PWD")"
-    local version_pattern="mongo-v([0-9]+)\.([0-9]+)"
+    local current_dir=${PWD##*/}
+    local version_pattern="mongo-v([0-9]+)\\.([0-9]+)"
     if [[ $current_dir =~ $version_pattern ]]; then
-        local major_version="${BASH_REMATCH[1]}"
-        local minor_version="${BASH_REMATCH[2]}"
+        local major_version="${match[1]}"
+        local minor_version="${match[2]}"
         __mongo_branch="v$major_version.$minor_version"
     else
         __mongo_branch="master"
@@ -552,8 +554,9 @@ __mongo-parse-args ()
 	__mongo-set-branch;
 	__cmd_prefix=;
 	__toolchain=clang;
+
 	__build_mode='--opt=on --dbg=on';
-	__link_model='--link-model=dynamic';
+	__link_model="--link-model=dynamic";
 	__format=1;
 	__target=devcore;
 	__tasks=1;
@@ -563,7 +566,7 @@ __mongo-parse-args ()
 	__log_component_verbosity='{logComponentVerbosity: {verbosity: 0}}'
 	__args=();
 
-	[[ -d ./src/mongo/db/modules/enterprise ]] && __enterprise=true;
+	[[ -d $PWD/src/mongo/db/modules/enterprise ]] && __enterprise=true;
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			--echo)
@@ -602,23 +605,23 @@ __mongo-parse-args ()
 				shift
 			;;
 			--debug)
-				__build_mode='--opt=off --dbg=on';
+				__build_mode="--opt=off --dbg=on";
 				shift
 			;;
 			--benchmark)
-				__build_mode='--opt=on --dbg=on';
+				__build_mode="--opt=on --dbg=on";
 				shift
 			;;
 			--sanitize-address)
-				__build_mode='--opt=on --dbg=on --sanitize=address --allocator=system';
+				__build_mode="--opt=on --dbg=on --sanitize=address --allocator=system";
 				shift
 			;;
 			--sanitize-thread)
-				__build_mode='--opt=on --dbg=on --sanitize=thread';
+				__build_mode="--opt=on --dbg=on --sanitize=thvared";
 				shift
 			;;
 			--release)
-				__build_mode='--opt=on --dbg=off';
+				__build_mode="--opt=on --dbg=off";
 				shift
 			;;
 			--dynamic)
@@ -681,7 +684,7 @@ __mongo-configure-ninja ()
 
 	__modules=;
 	[[ -n "$__enterprise" ]] && __modules="enterprise";
-	${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH ${__build_mode} ${__link_model} \
+	${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH $=__build_mode ${__link_model} \
 		--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
 	
 	)
