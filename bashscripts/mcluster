@@ -166,6 +166,13 @@ connect()
 	 $__cmd_prefix mongo --port $port && return 0;
 }
 
+connect-data-file()
+{
+	pkill -9 mongo
+	pkill -9 mongod
+	mongod --port 12332 --dbpath $1 > /tmp/tmp.log &
+	echo "waiting 20 seconds before running console ..." && sleep 20 && mongo --port 12332
+}
 
 #create symlink to playground folder in current directory
 pg-init()
