@@ -70,6 +70,12 @@ mongo-setup-tools()
         git clone https://github.com/kaloianm/workscripts.git "$_ctool_path"
     fi
 
+    #install evg list from pierlauro
+    git clone https://github.com/pierlauro/evg_group_failures_by_test.git $_mongo_tools/evgls
+    cd $_mongo_tools/evgls
+    npm install 
+    cd -
+
     #configure icecc
     mongo-setup-icecc
 }

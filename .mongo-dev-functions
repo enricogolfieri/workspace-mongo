@@ -7,28 +7,6 @@
 #   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
 #!/bin/bash
 alias resmoke='python ./buildscripts/resmoke.py'
-mongo-new-branch()
-{
-
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-
-	__new_branch=$1
-
-	[[ -z ${__new_branch} ]] && echo "new branch name is required" && return 1;
-
-	${__cmd_prefix} git checkout  ${__mongo_branch} || ( echo "error occured while moving to ${__mongo_branch}, please fix the error fist and try again" && return 1 );
-	${__cmd_prefix} git pull origin ${__mongo_branch} || ( echo "error occured while pulling from ${__mongo_branch}, please fix the error fist and try again" && return 1 );
-	${__cmd_prefix} git checkout -b ${__new_branch} || ( echo "error occured while creating new branch ${__new_branch}, please fix the error fist and try again" && return 1 );
-
-	${__cmd_prefix} mongo-prepare
-	${__cmd_prefix} mongo-configure	
-	${__cmd_prefix} mongo-build
-
-	)
-
-}
 
 _mongo_update_venv_poetry()
 {
@@ -168,8 +146,8 @@ mongo-enable-multiversion()
 #   - Compiler family: --clang (default), --gcc
 #   - Compiling mode: --debug (default), --release
 #   - Linking mode: --dynamic (default), --static
-#   - Executables to build: --all (default), --core
-#   - Code formatting: --format (default), --no-format
+#   - Executables to build: --all, --dev (default), --core
+#   - Code formatting: --format , --no-format (default),
 #   - All those of ninja
 mongo-build ()
 {
@@ -313,7 +291,7 @@ mongo-test-locally()
 			--jobs=${__tasks} \
 			--log=file \
 			$__fcv_opts \
-			$__mrlog_arg\
+			$__mrlog_arg \
 			${__args[@]} 
 
 	testresult=$?
@@ -351,7 +329,7 @@ mongo-run-patch ()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 	
-	if [ -z "${__args[0]}" ]; then
+	if [[ -z ${__args[0]} ]]; then
 		msg="No description"
 		if [[ ${__cmd_prefix} != echo ]]; then
 			echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
@@ -557,7 +535,7 @@ __mongo-parse-args ()
 
 	__build_mode='--opt=on --dbg=on';
 	__link_model="--link-model=dynamic";
-	__format=1;
+	__format=0;
 	__target=devcore;
 	__tasks=1;
 	__enterprise=;
@@ -584,8 +562,8 @@ __mongo-parse-args ()
 				shift
 			;;
 			--verbose)
-				echo "eee"
-				__log_component_verbosity="'{logComponentVerbosity: {verbosity: 2}}'";
+				echo "enabling verbosity level 2"
+				__log_component_verbosity='{logComponentVerbosity: {verbosity: 2}}';
 				shift
 			;;
 			--v*)
@@ -657,6 +635,7 @@ __mongo-parse-args ()
 				shift
 			;;
 			--featureFlag*)
+				echo "enabling feature flag ${1#*--}"
 				__fcv_opts="--additionalFeatureFlags=${1#*--}"
 				shift
 			;;
