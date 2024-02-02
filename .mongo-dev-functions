@@ -13,9 +13,11 @@ _mongo_update_venv_poetry()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	${__cmd_prefix} python3 -m pip install 'poetry==1.5.1'
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install 'poetry==1.5.1'
 	${__cmd_prefix} export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
-	${__cmd_prefix} python3 -m poetry install --no-root --sync
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m poetry install --no-root --sync
+	#${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install mtools
+
 	)
 
 }
@@ -31,9 +33,10 @@ _mongo_update_venv_pip()
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx ensurepath
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx install db-contrib-tool
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pipx upgrade db-contrib-tool
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install mtools
 	)
 }
-mongo-update-venv()
+mongo-venv()
 {
 	( set -e;
 	__mongo-check-wrkdir;
@@ -75,7 +78,7 @@ mongo-prepare ()
 
 	${__cmd_prefix} python3 -m venv ${MONGO_VENV_DIRNAME};
 
-	mongo-update-venv
+	mongo-venv
 	)
 
 }
@@ -111,7 +114,12 @@ mongo-enable-enterprise()
 
 	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
 	${__cmd_prefix} mkdir -p src/mongo/db/modules/
-	${__cmd_prefix} git clone --branch $__mongo_branch git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise
+	_branched_off_commit=`git merge-base master $(git rev-parse --abbrev-ref HEAD)`
+	${__cmd_prefix} _enterprise_commit=`evg-api --json manifest --project mongodb-mongo-master --commit $_branched_off_commit | jq --raw-output .modules.enterprise.revision`
+	${__cmd_prefix} git clone --branch $__mongo_branch git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise 
+	${__cmd_prefix} cd src/mongo/db/modules/enterprise 
+	${__cmd_prefix} git reset --hard $_enterprise_commit
+	${__cmd_prefix} cd -
 }
 
 mongo-disable-enterprise()
@@ -639,18 +647,20 @@ __mongo-parse-args ()
 				__fcv_opts="--additionalFeatureFlags=${1#*--}"
 				shift
 			;;
+			--loop-fcv)
+				__loop_fcv=true;
+				shift
+			;;
+			--loop-suites)
+				__loop_suites=true;
+				shift
+			;;
 			*)
 				__args+=($1);
 				shift
 			;;
 		esac;
 	done;
-}
-
-__set_branch_description()
-{
-	__description=$1
-	echo "${__description}" > "$description_file"
 }
 
 __mongo-configure-ninja ()
@@ -662,7 +672,10 @@ __mongo-configure-ninja ()
 	__mongo_variable_path
 
 	__modules=;
-	[[ -n "$__enterprise" ]] && __modules="enterprise";
+	if [[ $__enterprise == true ]]; then
+		__modules="enterprise";
+		echo "[MONGO-WS] enterprised enabled";
+	fi
 	${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH $=__build_mode ${__link_model} \
 		--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
 	
