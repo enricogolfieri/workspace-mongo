@@ -280,51 +280,108 @@ mongo-code-analysis()
 # Options:
 #   - Concurrency: --single-task (default), --multi-task
 #   - All those of buildscripts/resmoke.py
-mongo-test-locally()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-check-venv;
-	__mongo-parse-args $@;
 
-	${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log ;
-	set +e;
-	__mrlog_arg='--mrlog';
-	[[ "$__mongo_branch" == "v4.4" ]] && __mrlog_arg="";
+__mongo_test_cmd()
+{
+	local __suite_opts=;
+	local __fcv="disabled"
+	local __suite="no_suite"
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			--suite)
+				__suite_opts="--suite=$2";
+				__suite=$2;
+				shift;
+				shift;
+			;;
+			--fcv)
+				__fcv_opts="--runAllFeatureFlagTests";
+				__fcv="enabled"
+				shift;
+			;;
+			*)
+				echo "no";
+				shift;
+			;;
+		esac;
+	done;
+
+    echo "RUNNING SUITE $__suite" FCV $__fcv
+
 
 	${__cmd_prefix} ./buildscripts/resmoke.py run \
-			--storageEngine=wiredTiger \
-			--storageEngineCacheSizeGB=0.5 \
-			--mongodSetParameters="$__log_component_verbosity" \
-			--jobs=${__tasks} \
-			--log=file \
-			$__fcv_opts \
-			$__mrlog_arg \
-			${__args[@]} 
+	--storageEngine=wiredTiger \
+	--storageEngineCacheSizeGB=0.5 \
+	--mongodSetParameters="$__log_component_verbosity" \
+	--jobs=${__tasks} \
+	--log=file \
+	$__fcv_opts \
+	$__suite_opts \
+	${__args[@]}
 
 	testresult=$?
 
 	mkdir -p ./.testdata
-	cp ./executor.log ./.testdata/executor.log
-	cp ./fixture.log ./.testdata/fixture.log
-	cp ./tests.log ./.testdata/tests.log
+	mrlog ./executor.log > ./.testdata/executor_${__suite}_${__fcv}.log
+	mrlog ./fixture.log > ./.testdata/fixture_${__suite}_${__fcv}.log
+	mrlog ./tests.log > ./.testdata/tests_${__suite}_${__fcv}.log
 
-	return ${testresult}
-			
-	)
+	if [ ${testresult} -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAILED"
+	fi
 }
 
-#Run a a specific test remotely on evergreen
-mongo-test-remotely()
+mongo-test-locally()
 {
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-	[ -z "${__args[0]}" ] && echo "You must specify a jstests path to test remotely | usage mongo-test-remotely <jstests/path/to/test.js>" && return 1
-	${__cmd_prefix} evergreen patch --project mongodb-mongo-$__mongo_branch --param burn_in_tests=${__args[0]}
-	)
-}
+    local __sharding=false
+    local __core=false
 
+    (set -e
+    __mongo-check-wrkdir
+    __mongo-check-venv
+    __mongo-parse-args $@
+
+    # Parse __args[@] for "jstests" followed by "/sharding" or "core"
+	echo "[TEST-LOCALLY] started.."
+	[[ -n $__loop_suites ]] && echo "Run all suites? yes"
+	[[ -n $__loop_fcv ]] && echo "Run with and without all feature flags? yes"
+
+	if [[ -n $__loop_suites ]]; then 
+		for arg in "${__args[@]}"; do
+			if [[ "$arg" == *"jstests/sharding"* ]]; then
+				echo "[TEST-LOCALLY] detected sharding test"
+				local suites=('sharding' 'sharding_last_lts' 'sharding_last_continuous' 'sharding_last_lts_mongos_and_mixed_shards') 
+			elif [[ "$arg" == *"jstests/core"* ]]; then
+				echo "[TEST-LOCALLY] detected core test"
+				local suites=('replica_sets_jscore_passthrough') 
+			else
+				echo "[TEST-LOCALLY] not specific test type detect, running default suite"
+				__mongo_test_cmd 
+				[[ -n $__loop_fcv ]] && __mongo_test_cmd --fcv
+				return 0
+			fi
+		done
+	else
+		__mongo_test_cmd 
+		[[ -n $__loop_fcv ]] && __mongo_test_cmd --fcv
+		return 0
+	fi
+
+
+    ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
+    set +e
+
+    for suite in "${suites[@]}"; do        
+        __mongo_test_cmd --suite $suite 
+		[[ -n $__loop_fcv ]] && __mongo_test_cmd --suite $suite --fcv
+    done
+
+    return 0
+    )
+}
 
 # Creates a new Evergreen path where it is possible to select the specific
 # suites to run. By default, all required suites are pre-selected.
@@ -646,6 +703,11 @@ __mongo-parse-args ()
 				echo "enabling feature flag ${1#*--}"
 				__fcv_opts="--additionalFeatureFlags=${1#*--}"
 				shift
+			;;
+			--loop-complete)
+				__loop_fcv=true;
+				__loop_suites=true;
+				shift		
 			;;
 			--loop-fcv)
 				__loop_fcv=true;
