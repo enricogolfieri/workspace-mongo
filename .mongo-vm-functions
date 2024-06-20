@@ -80,6 +80,30 @@ mongo-setup-tools()
     mongo-setup-icecc
 }
 
+# mongosh, mongoexport etc...
+mongo-install-user-tools()
+{
+    _link=;
+    if [[ -n "$_is_linux" ]] ; then
+        if [[ -n "$_is_arm" ]] ; then 
+            _link="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-amazon2023-aarch64-100.9.5.tgz"
+        else
+            echo "[mongo-install-user-tools] Missing link for linux x86_64 , please seach it on the doc"
+            return 1;
+        fi
+    elif [[ -n "$_is_macos" ]] ; then
+            echo "[mongo-install-user-tools] Missing link for macos , please seach it on the doc"
+            return 1;
+    fi
+
+    curl $_link -d /tmp/user-tools.tgz 
+    mkdir -p /tmp/user-tools-output
+    tar -zxvf /tmp/user-tools.tgz -C /tmp/user-tools-output --strip-components=1
+
+    #install
+    cp /tmp/user-tools-output/bin/* /usr/local/bin/
+}
+
 mongo-update-tools()
 {
     [ -d ""$_mongo_tools"" ] || { echo >&2 "I require "$_mongo_tools" but it's not installed. Please run mongo-setup-tools. Aborting."; return 1; }
@@ -102,6 +126,7 @@ mongo-setup-repos()
     _mongo_setup_old_repo v5.0
     _mongo_setup_old_repo v6.0
     _mongo_setup_old_repo v7.0
+    _mongo_setup_old_repo v8.0
     [ -d "~/mongo" ] ||  git clone git@github.com:10gen/mongo ~/mongo
     [ -d "~/mongo2" ] ||  git clone git@github.com:10gen/mongo ~/mongo2
     [ -d "~/mongo3" ] ||  git clone git@github.com:10gen/mongo ~/mongo3

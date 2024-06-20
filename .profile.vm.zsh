@@ -17,6 +17,7 @@ export PATH="$ctools_path":$PATH
 
 ### Set general environment settings
 export LC_ALL="C"
+export NINJA_STATUS="%p [%f/%t] (%r) %e"
 
 if [ -d /opt/go ]; then
     export PATH=/opt/go/bin:$PATH
@@ -46,3 +47,11 @@ fi
 if [ -d "/snap/bin" ]; then 
     export PATH="/snap/bin:$PATH"
 fi
+
+# MongoDB Toolchain
+#This will also overwrite your local python3
+if [ -d "/opt/mongodbtoolchain" ]; then
+    export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
+fi
+alias python=python3
+

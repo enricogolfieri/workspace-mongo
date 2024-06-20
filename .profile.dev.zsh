@@ -1,6 +1,7 @@
 #add mongofunction
 source $mongows/.mongo-dev-functions
 source $mongows/.mongo-evg-functions
+source $mongows/.mongo-help-functions
 
 # Env variables
 export PATH="$mongows/bashscripts:$PATH"
@@ -31,12 +32,6 @@ if [[ $(uname -m) == 'arm64' ]]; then
 fi
 
 export NINJA_STATUS='[%f/%t (%p) %es] '
-
-# MongoDB Toolchain
-#This will also overwrite your local python3
-if [ -d "/opt/mongodbtoolchain" ]; then
-    export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
-fi
 
 #Do not print in case of non-interactive shell
 [[ $- == *i* ]] || return

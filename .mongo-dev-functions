@@ -6,8 +6,8 @@
 # Options:
 #   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
 #!/bin/bash
-alias resmoke='python ./buildscripts/resmoke.py'
-
+alias resmoke='python ./build/install/bin/resmoke.py'
+_resmoke_cmd='python ./build/install/bin/resmoke.py'
 _mongo_update_venv_poetry()
 {
 	( set -e;
@@ -26,7 +26,7 @@ _mongo_update_venv_pip()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt --use-feature=2020-resolver
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install -r buildscripts/requirements.txt
 
 	#install db-contrib-tools
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install pipx
@@ -36,11 +36,15 @@ _mongo_update_venv_pip()
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install mtools
 	)
 }
+
 mongo-venv()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
+    __mongo_variable_path;
+
+	[[ -d  $MONGO_VENV_DIRNAME ]] || ${__cmd_prefix} /opt/mongodbtoolchain/${MONGO_TOOLCHAIN_VER}/bin/python3 -m venv ${MONGO_VENV_DIRNAME};
 
 	case ${__mongo_branch} in
 		v4.2)
@@ -58,29 +62,6 @@ mongo-venv()
 	esac
 
 	)
-}
-
-mongo-prepare ()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-
-	if [[ ${__cmd_prefix} != echo ]]; then
-		echo "WARNING: All uncommitted changes and unversioned files will be lost,Are you sure you want to proceed? [y/N]"
-		read -r _reply
-		[[ ${_reply} =~ (y|Y) ]] || return 0;
-	fi
-
-	[[ -n ${VIRTUAL_ENV} ]] && ${__cmd_prefix} deactivate;
-	${__cmd_prefix} git clean -fdx --exclude=".vscode/*";
-	${__cmd_prefix} ccache -C;
-
-	${__cmd_prefix} python3 -m venv ${MONGO_VENV_DIRNAME};
-
-	mongo-venv
-	)
-
 }
 
 # Generates the `build.ninja` and `compile_commands.json` files, which are
@@ -114,8 +95,8 @@ mongo-enable-enterprise()
 
 	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
 	${__cmd_prefix} mkdir -p src/mongo/db/modules/
-	_branched_off_commit=`git merge-base master $(git rev-parse --abbrev-ref HEAD)`
-	${__cmd_prefix} _enterprise_commit=`evg-api --json manifest --project mongodb-mongo-master --commit $_branched_off_commit | jq --raw-output .modules.enterprise.revision`
+	local _branched_off_commit=`git merge-base master $(git rev-parse --abbrev-ref HEAD)`
+	${__cmd_prefix} local _enterprise_commit=`evg-api --json manifest --project mongodb-mongo-master --commit $_branched_off_commit | jq --raw-output .modules.enterprise.revision`
 	${__cmd_prefix} git clone --branch $__mongo_branch git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise 
 	${__cmd_prefix} cd src/mongo/db/modules/enterprise 
 	${__cmd_prefix} git reset --hard $_enterprise_commit
@@ -168,7 +149,7 @@ mongo-build ()
 
 	[[ -f build.ninja ]] || __mongo-configure-ninja $@;
 	[[ -f compile_commands.json ]] || __mongo-configure-compilation-db $@;
-	${__cmd_prefix} ninja -j${JOBS} generated-sources install-${__target} ${__args[@]}
+	${__cmd_prefix} ninja -l80 -j${JOBS} generated-sources install-${__target} ${__args[@]}
 
 	)
 }
@@ -192,7 +173,7 @@ mongo-unit()
 		then
 			${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +${1}
 		else
-			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- buildscripts/resmoke.py run --jobs=12 --suite=unittests
+			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- python ./build/install/bin/resmoke.py run --jobs=12 --suite=unittests
 		fi
 	)
 }
@@ -203,7 +184,7 @@ mongo-benchmark()
 	__mongo-parse-args $@;
 	( set -e;
 		[[ -z "$1" ]] && echo "Usage: mongo-benchmark <benchmark_name>" && return 1
-		${__cmd_prefix} ninja -j400 ./build/install/bin/$1 && 
+		${__cmd_prefix} ninja -j12 ./build/install/bin/$1 && 
 		${__cmd_prefix} ./build/install/bin/$1 --benchmark_out_format=csv --benchmark_out="./$1.csv"
 
 		#open csv if visual studio code terminal is used
@@ -281,11 +262,43 @@ mongo-code-analysis()
 #   - Concurrency: --single-task (default), --multi-task
 #   - All those of buildscripts/resmoke.py
 
-__mongo_test_cmd()
+__mongo_test()
+{
+	${__cmd_prefix} python ./build/install/bin/resmoke.py run \
+		--storageEngine=wiredTiger \
+		--storageEngineCacheSizeGB=0.5 \
+		--mongodSetParameters="$__log_component_verbosity" \
+		--mongosSetParameters="$__log_component_verbosity" \
+		--jobs=${__tasks} \
+		--log=file \
+		$__fcv_opts \
+		$__suite_opts \
+		${__args[@]}
+
+		testresult=$?
+
+		if [ ${testresult} -eq 0 ]; then
+			echo "OK"
+		else
+			echo "FAILED"
+		fi
+		return ${testresult}
+}
+__mongo_test_cmd_simple()
+{
+	__mongo_test 
+
+	rm -rf ./.testdata
+	mkdir -p ./.testdata
+	mrlog ./executor.log > ./.testdata/mr_executor.log
+	mrlog ./fixture.log > ./.testdata/mr_fixture.log
+	mrlog ./tests.log > ./.testdata/mr_tests.log
+}
+__mongo_test_cmd_in_loop()
 {
 	local __suite_opts=;
 	local __fcv="disabled"
-	local __suite="no_suite"
+	local __suite="default"
 
 	while [[ $# -gt 0 ]]; do
 		case $1 in
@@ -309,77 +322,74 @@ __mongo_test_cmd()
 
     echo "RUNNING SUITE $__suite" FCV $__fcv
 
+	__mongo_test
 
-	${__cmd_prefix} ./buildscripts/resmoke.py run \
-	--storageEngine=wiredTiger \
-	--storageEngineCacheSizeGB=0.5 \
-	--mongodSetParameters="$__log_component_verbosity" \
-	--jobs=${__tasks} \
-	--log=file \
-	$__fcv_opts \
-	$__suite_opts \
-	${__args[@]}
-
-	testresult=$?
-
+	rm -rf ./.testdata
 	mkdir -p ./.testdata
-	mrlog ./executor.log > ./.testdata/executor_${__suite}_${__fcv}.log
-	mrlog ./fixture.log > ./.testdata/fixture_${__suite}_${__fcv}.log
-	mrlog ./tests.log > ./.testdata/tests_${__suite}_${__fcv}.log
+	mrlog ./executor.log > ./.testdata/mr_executor_${__suite}_${__fcv}.log
+	mrlog ./fixture.log > ./.testdata/mr_fixture_${__suite}_${__fcv}.log
+	mrlog ./tests.log > ./.testdata/mr_tests_${__suite}_${__fcv}.log
 
-	if [ ${testresult} -eq 0 ]; then
-		echo "OK"
-	else
-		echo "FAILED"
-	fi
 }
 
 mongo-test-locally()
 {
-    local __sharding=false
-    local __core=false
-
     (set -e
     __mongo-check-wrkdir
     __mongo-check-venv
     __mongo-parse-args $@
 
-    # Parse __args[@] for "jstests" followed by "/sharding" or "core"
+   ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
+    set +e
+
 	echo "[TEST-LOCALLY] started.."
 	[[ -n $__loop_suites ]] && echo "Run all suites? yes"
 	[[ -n $__loop_fcv ]] && echo "Run with and without all feature flags? yes"
 
+	#CASE --fcv || none: run the test with default suite and no fcv. Run with --fcv if specified.
+	if [[ -z $__loop_suites ]]; then
+		if [[ -z $__loop_fcv ]]; then
+		 	__mongo_test_cmd_simple; 
+			return ${testresult} 
+		else
+			#Run test for default suite and for every fcv
+			__mongo_test_cmd_in_loop 
+			[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --fcv
+			return ${testresult} 
+		fi
+	fi
+
+	#CASE --complete || --suite : run for every suite. Run also --fcv in case of --complete for every suite.
+	local __test_non_default_suite=;
 	if [[ -n $__loop_suites ]]; then 
 		for arg in "${__args[@]}"; do
 			if [[ "$arg" == *"jstests/sharding"* ]]; then
 				echo "[TEST-LOCALLY] detected sharding test"
 				local suites=('sharding' 'sharding_last_lts' 'sharding_last_continuous' 'sharding_last_lts_mongos_and_mixed_shards') 
+				__test_non_default_suite=true;
 			elif [[ "$arg" == *"jstests/core"* ]]; then
 				echo "[TEST-LOCALLY] detected core test"
-				local suites=('replica_sets_jscore_passthrough') 
-			else
-				echo "[TEST-LOCALLY] not specific test type detect, running default suite"
-				__mongo_test_cmd 
-				[[ -n $__loop_fcv ]] && __mongo_test_cmd --fcv
-				return 0
+				local suites=('replica_sets_jscore_passthrough' 'sharding_jscore_passthrough' 'sharded_collections_jscore_passthrough' 'sharding_api_version_jscore_passthrough') 
+				__test_non_default_suite=true
 			fi
 		done
-	else
-		__mongo_test_cmd 
-		[[ -n $__loop_fcv ]] && __mongo_test_cmd --fcv
-		return 0
 	fi
 
+	if [[ -n $__test_non_default_suite ]]; then
+		#Run test for every suire for every fcv 
+		for suite in "${suites[@]}"; do        
+			__mongo_test_cmd_in_loop --suite $suite 
+			[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --suite $suite --fcv
+		done
+		return ${testresult} 
+	else
+		#Run test on every fcv with default suite
+		echo "[TEST-LOCALLY] not specific test type detect, running default suite"
+		__mongo_test_cmd_in_loop 
+		[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --fcv
+		return ${testresult} 
+	fi
 
-    ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
-    set +e
-
-    for suite in "${suites[@]}"; do        
-        __mongo_test_cmd --suite $suite 
-		[[ -n $__loop_fcv ]] && __mongo_test_cmd --suite $suite --fcv
-    done
-
-    return 0
     )
 }
 
@@ -508,7 +518,7 @@ mongo-debug ()
 MONGO_VENV_DIRNAME=${MONGO_VENV_DIRNAME:-'.venv'}
 ICECC_VAR="ICECC=icecc"
 CCACHE_VAR="CCACHE=ccache"
-JOBS=300
+JOBS=400
 
 #do not set icecc if command is not found
 if ! command -v icecc &> /dev/null; then
@@ -601,7 +611,14 @@ __mongo-parse-args ()
 	__build_mode='--opt=on --dbg=on';
 	__link_model="--link-model=dynamic";
 	__format=0;
-	__target=devcore;
+	case ${__mongo_branch} in
+	v4.*)
+		__target=core;;;
+	v5.*)
+		__target=core;;;
+	*)
+		__target=devcore;;;
+	esac
 	__tasks=1;
 	__enterprise=;
 	__modules=;

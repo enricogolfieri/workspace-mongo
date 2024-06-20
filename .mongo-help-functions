@@ -1,0 +1,49 @@
+
+function mongo-download-bin-and-symbols()
+{
+    local _arch="x86_64"
+    local _platform="rhel70"
+    local _version=$1
+	local _edition="targeted"
+
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+			--help)
+				echo "mongo-download-bin-and-symbols <binary>  --arch (default x86_64) --platform (default rhel70) --edition (default targeted)"
+			;;
+			--arch)
+				_arch=$2;
+				shift 2;
+			;;
+			--platform)
+				_platform=$2;
+				shift 2;
+			;;
+			--edition)
+				_edition=$2
+				shift;
+			;;
+			*)
+				shift;
+			;;
+		esac;
+	done;
+
+	[[ -z "$_version" ]] && echo "mongo-download-bin-and-symbols <binary>  --arch (default x86_64) --platform (default rhel70)" && return 1
+
+
+	_dsu=$(curl -s "https://downloads.mongodb.org/full.json" | jq --arg _version "$_version" --arg _arch "$_arch" --arg _edition "$_edition" --arg _platform "$_platform" '.versions[] | select(.version == $_version) | .downloads[] | select(.arch == $_arch and .edition == $_edition and .target == $_platform)' | jq '.archive.debug_symbols')
+	_dbu=$(curl -s "https://downloads.mongodb.org/full.json" | jq --arg _version "$_version" --arg _arch "$_arch" --arg _edition "$_edition" --arg _platform "$_platform" '.versions[] | select(.version == $_version) | .downloads[] | select(.arch == $_arch and .edition == $_edition and .target == $_platform)' | jq '.archive.url')
+
+
+	echo "extracted $_dsu and $_dbu"
+    curl `echo "$_dsu" | tr -d '"'` -o symbols.tgz && tar zxvf symbols.tgz 
+    curl `echo "$_dbu" | tr -d '"'` -o binaries.tgz && tar zxvf binaries.tgz 
+
+}
+
+function mongo-link-to-download-from-build-id
+{
+  echo "Open this to link to chrome (needs login) then run mongo-download-binary <link>"
+  echo "https://symbolizer-service.server-tig.prod.corp.mongodb.com/find_by_id?build_id=$1"
+}

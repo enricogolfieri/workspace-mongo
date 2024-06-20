@@ -1,7 +1,7 @@
 #!/bin/bash
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
-
+_data_file_port=12332
 kill() {
 	__enable_python_env
   echo "About to kill all processes" 
@@ -170,8 +170,17 @@ connect-data-file()
 {
 	pkill -9 mongo
 	pkill -9 mongod
-	mongod --port 12332 --dbpath $1 > /tmp/tmp.log &
-	echo "waiting 20 seconds before running console ..." && sleep 20 && mongo --port 12332
+	echo `mongod --version`
+	echo `mongo --version`
+
+	$__cmd_prefix mongod --port 12332 --dbpath $1 ${@:2} > /tmp/tmp.log &
+	echo "waiting 5 seconds before running console ..." && sleep 5 && mongo --port $_data_file_port
+}
+
+print-oplog()
+{
+	[[ -z $1 ]] && echo "Usage mcluster print-oplog <tag>. tag required to the output file oplog_results_<tag>.json"
+	mongoexport --db=local --collection=oplog.rs --query='{}' --fields='ts,op,ns,o' --sort='{"$natural":-1}' --out=oplog_results_$1.json --host="localhost:$_data_file_port"
 }
 
 #create symlink to playground folder in current directory
@@ -266,11 +275,47 @@ __add_to_path ()
     export PATH=${1}:$PATH
 }
 
+link()
+{
+	while [[ $# -gt 0 ]]; do
+		__folder=;
+		case $1 in
+			--mongo1)
+				__folder="mongo"
+				shift
+			;;
+			--mongo2)
+				__folder="mongo2"
+				shift
+			;;
+			--mongo3)
+			    __folder="mongo3"
+				shift
+			;;
+			*)
+				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
+				m $1
+				shift
+			;;
+		esac;
+	done;
+
+	[[ -z $__folder ]] && exit 0;
+
+	Echo "provided custom master folder ~/$__folder/build/install/bin/"
+	rm -rf ~/.local/bin/* 
+	rm -rf ~/.local/lib/*
+	cp -r ~/$__folder/build/install/bin/* ~/.local/bin 
+	echo "~/$__folder/build/install/bin installed!"
+	cp -r ~/$__folder/build/install/lib/* ~/.local/lib 
+	echo "~/$__folder/build/install/lib installed!"
+
+}
+
 __parse_args()
 {
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
-	__add_to_path ./build/debug/install/bin
 	__add_to_path ./build/install/bin
 
 	__cmd_prefix=;
