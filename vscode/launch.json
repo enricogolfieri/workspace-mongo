@@ -60,8 +60,6 @@
         },
     ],
     "configurations": [
-
-
         {
             "name": "lldb: attach",
             "type": "lldb",
@@ -86,6 +84,48 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/${input:buildVariant}/install/bin/mongod",
             "stopOnEntry": true,
+        },
+        {
+                "name": "debug test",
+                "type": "cppdbg",
+                "request": "launch",
+                "cwd": "${workspaceRoot}",
+                "program": "${workspaceFolder}/build/install/bin/${input:processBinary}",
+                "args": ["--filter", "${input:testFilter}", "--verbose=v"],
+                "MIMode": "gdb",
+                "miDebuggerPath": "/opt/mongodbtoolchain/v4/bin/gdb",
+                "targetArchitecture": "arm64",
+                "setupCommands": [
+                  {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo.py",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/optimizer_printers.py",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo_printers.py",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo_lock.py",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/wt_dump_table.py",
+                    "ignoreFailures": false
+                  },
+                  {
+                    "text": "source ${workspaceFolder}/src/third_party/immer/dist/tools/gdb_pretty_printers/autoload.py",
+                    "ignoreFailures": false
+                  }
+                ]
         }
     ]
 }

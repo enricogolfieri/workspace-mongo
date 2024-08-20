@@ -7,6 +7,7 @@ source $mongows/.mongo-help-functions
 export PATH="$mongows/bashscripts:$PATH"
 _mongo_tools="$HOME/mongo-tools"
 _ctool_path="$_mongo_tools"/ctools
+_employee_repo="$HOME/employee"
 
 ### Compute _os variable
 _os="Linux";

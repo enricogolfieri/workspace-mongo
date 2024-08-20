@@ -64,6 +64,19 @@ mongo-venv()
 	)
 }
 
+mongo-data-files-setup()
+{
+	echo "WARN: this will create a virtual environment in the current folder, proceed? [y/N] ";
+	read -r _reply;
+	[[ ${_reply} =~ (y|Y) ]] || return 0;
+
+	__mongo-parse-args $@;
+	${__cmd_prefix} /opt/mongodbtoolchain/${MONGO_TOOLCHAIN_VER}/bin/python3 -m venv ${MONGO_VENV_DIRNAME};
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} pip install wiredtiger-debug-tools
+
+}
+
 # Generates the `build.ninja` and `compile_commands.json` files, which are
 # required by the underlying build system (i.e. Ninja) and the language server
 # (i.e. ccls or clangd) respectively. The `mongo-build` function automatically
@@ -169,11 +182,11 @@ mongo-unit()
 		__mongo-parse-args $@;
 		__mongo-check-mrlog;
 
-		if [[ -n $1 ]]; 
+		if [[ -n $__args[1] ]]; 
 		then
-			${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +${1}
+			${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +$__args[1]
 		else
-			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- python ./build/install/bin/resmoke.py run --jobs=12 --suite=unittests
+			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- ${MONGO_VENV_DIRNAME}/bin/python3 ./build/install/bin/resmoke.py run --jobs=12 --suite=unittests
 		fi
 	)
 }
@@ -181,14 +194,19 @@ mongo-unit()
 # Runs the benchmark test 
 mongo-benchmark()
 {
-	__mongo-parse-args $@;
 	( set -e;
-		[[ -z "$1" ]] && echo "Usage: mongo-benchmark <benchmark_name>" && return 1
-		${__cmd_prefix} ninja -j12 ./build/install/bin/$1 && 
-		${__cmd_prefix} ./build/install/bin/$1 --benchmark_out_format=csv --benchmark_out="./$1.csv"
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+		if [[ -z "$__args[1]" ]]; then
+			echo "Usage: mongo-benchmark <benchmark_name>" ;
+			return 1;
+		fi
+
+		${__cmd_prefix} mrlog -c -e ninja -- -j12 ./build/install/bin/$__args[1] && 
+		${__cmd_prefix} mrlog -c -e ./build/install/bin/$__args[1] --  --benchmark_out_format=csv --benchmark_out="./$__args[1].csv"
 
 		#open csv if visual studio code terminal is used
-		[[ "$TERM_PROGRAM" == "vscode" ]] && ${__cmd_prefix} code -r ./$1.csv
+		[[ "$TERM_PROGRAM" == "vscode" ]] && ${__cmd_prefix} code -r ./$__args[1].csv
 	)
 }
 
@@ -404,7 +422,7 @@ mongo-run-patch ()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 	
-	if [[ -z ${__args[0]} ]]; then
+	if [[ -z ${__args[1]} ]]; then
 		msg="No description"
 		if [[ ${__cmd_prefix} != echo ]]; then
 			echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
@@ -426,7 +444,7 @@ mongo-run-patch ()
 	else
 		if [[ $__enterprise == true ]]; then
 			cd ./src/mongo/db/modules/enterprise
-			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[0]}
+			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[1]}
 			cd - 
 		fi
 	fi
@@ -441,9 +459,9 @@ mongo-run-patch-workload()
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-check-venv;
-	__mongo-parse-args $@;
+    __mongo-parse-args $@;
 
-	if [[ -z "${__args[0]}" ]]; then
+	if [[ -z "${__args[1]}" ]]; then
 		_sys_perf="sys-perf"
 		[[ $__mongo_branch != "master" ]] && _sys_perf="sys-perf-${__mongo_branch#*v}"
 
@@ -451,7 +469,7 @@ mongo-run-patch-workload()
 		echo "COPY THE ID OF THE PATCH AND RUN: mongo-run-patch-workload <patch_id>"
 	else
 		${__cmd_prefix} cd $HOME/workload; git pull origin master #update the workloads
-		${__cmd_prefix} evergreen set-module -m workloads -i ${__args[0]} #add the workloads to the patch
+		${__cmd_prefix} evergreen set-module -m workloads -i ${__args[1]} #add the workloads to the patch
 		${__cmd_prefix} cd - 
 	fi
 	)
@@ -466,7 +484,7 @@ mongo-merge ()
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
 		
-	if [[ -z "${__args[0]}" ]]; then
+	if [[ -z "${__args[1]}" ]]; then
 		echo "ciao"
 		__pause=;
 		[[ -n "$__enterprise" ]] && __pause=" --pause";
@@ -476,8 +494,8 @@ mongo-merge ()
 	else 
 		if [[ $__enterprise == true ]]; then
 			${__cmd_prefix} cd ./src/mongo/db/modules/enterprise
-			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[0]} -m enterprise 
-			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[0]}
+			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[1]} -m enterprise 
+			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[1]}
 			${__cmd_prefix} cd - 
 		fi;
 

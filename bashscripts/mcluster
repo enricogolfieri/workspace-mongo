@@ -302,11 +302,11 @@ link()
 
 	[[ -z $__folder ]] && exit 0;
 
-	Echo "provided custom master folder ~/$__folder/build/install/bin/"
+	echo "provided custom master folder ~/$__folder/build/install/bin/"
 	rm -rf ~/.local/bin/* 
 	rm -rf ~/.local/lib/*
 	cp -r ~/$__folder/build/install/bin/* ~/.local/bin 
-	echo "~/$__folder/build/install/bin installed!"
+	echo "~/$__folder/build/install/bin installed! Installing libs ..."
 	cp -r ~/$__folder/build/install/lib/* ~/.local/lib 
 	echo "~/$__folder/build/install/lib installed!"
 

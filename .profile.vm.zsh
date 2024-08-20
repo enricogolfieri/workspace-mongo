@@ -53,5 +53,11 @@ fi
 if [ -d "/opt/mongodbtoolchain" ]; then
     export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
 fi
+
+#This will overwrite the mongodb toolchain clang
+if [ -d "$HOME/llvm-project/build/bin/" ]; then
+    export PATH="$HOME/llvm-project/build/bin/:$PATH"
+fi
+
 alias python=python3
 

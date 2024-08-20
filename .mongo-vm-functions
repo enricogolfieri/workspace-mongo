@@ -49,17 +49,6 @@ mongo-setup-tools()
         cargo install --path .
     fi 
 
-	#install mark-benvenuto extension
-    _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
-    if [[ ! -d "$_mark_benvenuto_extesion_path" ]]; then
-       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path && \
-        cd $_mark_benvenuto_extesion_path && \
-        npm install && npm run compile
-    fi
-
-    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
-    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
-
     #install db-contrib-tool
     if [[ ! -d ""$_mongo_tools"/db-contrib-tool" ]]; then
         git clone git@github.com:10gen/db-contrib-tool.git "$_mongo_tools"/db-contrib-tool
@@ -71,13 +60,52 @@ mongo-setup-tools()
     fi
 
     #install evg list from pierlauro
-    git clone https://github.com/pierlauro/evg_group_failures_by_test.git $_mongo_tools/evgls
-    cd $_mongo_tools/evgls
-    npm install 
-    cd -
+    if [[ ! -d "$_mongo_tools/evgls" ]]; then
+        git clone https://github.com/pierlauro/evg_group_failures_by_test.git $_mongo_tools/evgls
+        cd $_mongo_tools/evgls
+        npm install 
+        cd -
+    fi
 
-    #configure icecc
-    mongo-setup-icecc
+    #Install employees repo
+    if [[ ! -d "$_employee_repo" ]]; then
+        git clone git@github.com:10gen/employees.git $_employee_repo
+    fi
+
+    #Install m
+    npm install -g m
+}
+
+mongo-setup-vscode-plugins()
+{   
+    #MARK BENVENUTO
+    # (nvm use --lts) || echo "Please run `nvm install --lts` before running this script"
+
+	# #install mark-benvenuto extension
+    # _out_mongodev="/tmp/mongodev"
+    # rm -rf $_out_mongodev
+
+    # git clone git@github.com:markbenvenuto/mongodev.git $_out_mongodev
+    # cd $_out_mongodev && \
+    # npm install && npm run compile
+    # cd -
+
+    #WOLFEE
+    if [[ ! -d "$_employee_repo" ]] then;
+         echo "Run mongo-setup-tools to install employees repo" 
+         return 1;
+    fi
+    (nvm use --lts) || echo "Please run `nvm install --lts` before running this script"
+
+    #update employee repo
+    git pull $_employee_repo
+
+    rm -rf /tmp/wolfee.mongodb-test-explorer
+    cp -r $_employee_repo/home/wolfee/mongodb-test-explorer /tmp/wolfee.mongodb-test-explorer
+
+    cd /tmp/wolfee.mongodb-test-explorer && \
+    sudo npm install -g @vscode/vsce && vsce package
+    cd -
 }
 
 # mongosh, mongoexport etc...
@@ -102,6 +130,13 @@ mongo-install-user-tools()
 
     #install
     cp /tmp/user-tools-output/bin/* /usr/local/bin/
+}
+
+mongo-install-wt()
+{
+    git clone https://github.com/wiredtiger/wiredtiger.git ~/wiredtiger 
+    cd ~/wiredtiger && mkdir build && cd build 
+    cmake ../. -G Ninja && ninja -j8 && sudo ninja install 
 }
 
 mongo-update-tools()
@@ -162,6 +197,15 @@ mongo-setup-dsi()
     brew install awscli
 
     echo "Done! please now run ./run-dsi onboarding and follow instructions"
+}
+
+mongo-setup-clang-latest-build()
+{
+    if read -q "This might take up to 1h, continue ? Y/y"; then
+        git clone https://github.com/llvm/llvm-project.git $HOME/llvm-project && cd $HOME/llvm-project && mkdir build && cmake -S llvm -B build -G Ninja \
+        -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra' \
+        -DCMAKE_BUILD_TYPE=Release && cmake --build build --target 'clang;clang-tidy;clang-format;clangd'
+    fi
 }
 
 mongo-free-memory()
