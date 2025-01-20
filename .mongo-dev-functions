@@ -6,8 +6,14 @@
 # Options:
 #   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
 #!/bin/bash
+
+# Bazel guide https://wiki.corp.mongodb.com/display/HGTC/Building+with+Bazel
+
 alias resmoke='python ./build/install/bin/resmoke.py'
 _resmoke_cmd='python ./build/install/bin/resmoke.py'
+
+######################################################## Install Virtual Environment ########################################################################
+
 _mongo_update_venv_poetry()
 {
 	( set -e;
@@ -64,17 +70,59 @@ mongo-venv()
 	)
 }
 
-mongo-data-files-setup()
+######################################################## Make Compile DB ########################################################################
+_mongo_make_compile_db_scons()
 {
-	echo "WARN: this will create a virtual environment in the current folder, proceed? [y/N] ";
-	read -r _reply;
-	[[ ${_reply} =~ (y|Y) ]] || return 0;
-
-	__mongo-parse-args $@;
-	${__cmd_prefix} /opt/mongodbtoolchain/${MONGO_TOOLCHAIN_VER}/bin/python3 -m venv ${MONGO_VENV_DIRNAME};
 	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-	${__cmd_prefix} pip install wiredtiger-debug-tools
+	${__cmd_prefix} ninja compiledb $@
+}
 
+_mongo_make_compile_db_bazel()
+{
+	${__cmd_prefix} bazel run compiledb $@
+}
+
+mongo-make-compiledb ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+	case ${__mongo_branch} in
+		v4.*)
+			_mongo_make_compile_db_scons ${__args[@]};;
+		v5.*)
+			_mongo_make_compile_db_scons ${__args[@]};;
+		v6.*)
+			_mongo_make_compile_db_scons ${__args[@]};;
+		v7.*)
+			_mongo_make_compile_db_scons ${__args[@]};;
+		v8.0)
+			_mongo_make_compile_db_scons ${__args[@]};;
+		*)
+			_mongo_make_compile_db_bazel ${__args[@]};;
+	esac
+	)
+}
+
+alias mongo-compiledb='mongo-make-compiledb'
+alias mcompiledb='mongo-make-compiledb'
+
+######################################################## Build ########################################################################
+
+__mongo-configure-ninja ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-check-venv;
+	__mongo-parse-args $@;
+	__mongo_variable_path
+
+
+	${__cmd_prefix} ./buildscripts/scons.py --variables-files=$MONGO_VARIABLE_PATH $=__build_mode_ninja ${__link_model} \
+		--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
+	
+	)
 }
 
 # Generates the `build.ninja` and `compile_commands.json` files, which are
@@ -98,140 +146,166 @@ mongo-configure ()
 	__mongo-parse-args $@;
 
 	__mongo-configure-ninja $@;
-	__mongo-configure-compilation-db $@ )
+	mongo-make-compiledb $@ )
 }
-
-mongo-enable-enterprise()
-{
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-
-	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-	${__cmd_prefix} mkdir -p src/mongo/db/modules/
-	local _branched_off_commit=`git merge-base master $(git rev-parse --abbrev-ref HEAD)`
-	${__cmd_prefix} local _enterprise_commit=`evg-api --json manifest --project mongodb-mongo-master --commit $_branched_off_commit | jq --raw-output .modules.enterprise.revision`
-	${__cmd_prefix} git clone --branch $__mongo_branch git@github.com:10gen/mongo-enterprise-modules.git src/mongo/db/modules/enterprise 
-	${__cmd_prefix} cd src/mongo/db/modules/enterprise 
-	${__cmd_prefix} git reset --hard $_enterprise_commit
-	${__cmd_prefix} cd -
-}
-
-mongo-disable-enterprise()
-{
-	echo "WARN: this will delete all the enterprise uncommitted changes, proceed? [y/N] ";
-	read -r _reply;
-	[[ ${_reply} =~ (y|Y) ]] || return 0;
-	${__cmd_prefix} rm -rf src/mongo/db/modules/enterprise
-}
-
-#downloag last LTS and last continuous version of mongo to enable multiversion local testing
-mongo-enable-multiversion()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-
-	#remove first "v" from __mongo_branch. In case is master => master, in case is vX.Y => X.Y
-	local version=${__mongo_branch#*v}
-	
-	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
-	${__cmd_prefix} db-contrib-tool setup-repro-env $version --linkDir ./build/install/bin/  --installLastLTS --installLastContinuous )
-}
-
 
 # Builds all the executables. If the `build.ninja` or `compile_commands.json`
 # file is missing (e.g. at first run), it is automatically generated. Source
 # files are also formatted before being compiled.
-#
-# Options:
-#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
-#   - Compiler family: --clang (default), --gcc
-#   - Compiling mode: --debug (default), --release
-#   - Linking mode: --dynamic (default), --static
-#   - Executables to build: --all, --dev (default), --core
-#   - Code formatting: --format , --no-format (default),
-#   - All those of ninja
+_mongo_build_scons()
+{
+	__mongo_variable_path
+
+	[[ -f build.ninja ]] || __mongo-configure-ninja;
+	[[ -f compile_commands.json ]] || mongo-make-compiledb;
+
+	case ${__mongo_branch} in
+	v4.*)
+		__target=install-core;;;
+	v5.*)
+		__target=install-core;;;
+	*)
+		__target=install-devcore;;;
+	esac
+
+	[[ -n $1 ]] && __target=$1;
+
+	${__cmd_prefix} ninja -l80 -j${JOBS} generated-sources ${__target} ${@:2}
+}
+
+_mongo_build_bazel()
+{
+	[[ -f compile_commands.json ]] || mongo-make-compiledb;
+	__target=install-dist-test;
+	[[ -n $1 ]] && __target=$1;
+	[[ $__target = 'core' ]] && __target="install-devcore";
+	[[ $__target = '--core' ]] && __target="install-devcore";
+	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} ${@:2}
+	#create a symb link to the last build  (will be used by resmoke for testing)
+	${__cmd_prefix} rm -f $BAZEL_INSTALL_DIR
+	${__cmd_prefix} ln -s bazel-bin/$__target/bin $BAZEL_INSTALL_DIR
+}
+
+
 mongo-build ()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	__mongo_variable_path
 
 	[[ ${__format} == 1 ]] && ${__cmd_prefix} mongo-format ${__mongo_branch};
 
-	[[ -f build.ninja ]] || __mongo-configure-ninja $@;
-	[[ -f compile_commands.json ]] || __mongo-configure-compilation-db $@;
-	${__cmd_prefix} ninja -l80 -j${JOBS} generated-sources install-${__target} ${__args[@]}
+	case ${__mongo_branch} in
+		v4.*)
+			_mongo_build_scons ${__args[@]};;
+		v5.*)
+			_mongo_build_scons ${__args[@]};;
+		v6.*)
+			_mongo_build_scons ${__args[@]};;
+		v7.*)
+			_mongo_build_scons ${__args[@]};;
+		v8.0)
+			_mongo_build_scons ${__args[@]};;
+		*)
+			_mongo_build_bazel ${__args[@]};;
+	esac
 
 	)
 }
 
-mongo-reset-vscode-settings()
+alias mbuild="mongo-build"
+######################################################## Unit Test ########################################################################
+
+_mongo_unit_scons()
 {
-	#copy vs code settings
-	mkdir -p .vscode
-	cp -r $mongows/vscode/* .vscode
+	__mongo-check-mrlog;
+
+	if [[ -n $1 ]]; 
+	then
+		${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +$1 ${@:2}
+	else
+		${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- ${MONGO_VENV_DIRNAME}/bin/python3 ./build/install/bin/resmoke.py run --jobs=12 --suite=unittests
+	fi
 }
 
-# Runs the unit tests.
+_mongo_unit_bazel()
+{
+	if [[ -n $1 ]]; 
+	then
+		${__cmd_prefix} mrlog -c -e bazel -- test +base_test +$1 ${@:2}
+	else
+		${__cmd_prefix} mrlog -c -e bazel -- test --test_tag_filters=mongo_unittest,-intermediate_target --local_test_jobs=HOST_CPUS //src/...
+	fi
+}
+
 mongo-unit()
 {
 	( set -e;
 		__mongo-check-wrkdir;
 		__mongo-parse-args $@;
-		__mongo-check-mrlog;
 
-		if [[ -n $__args[1] ]]; 
-		then
-			${__cmd_prefix} mrlog -c -e ninja -- -f build.ninja -j12 +$__args[1]
-		else
-			${__cmd_prefix} mrlog -c -e ${MONGO_VENV_DIRNAME}/bin/python3 -- ${MONGO_VENV_DIRNAME}/bin/python3 ./build/install/bin/resmoke.py run --jobs=12 --suite=unittests
-		fi
+		case ${__mongo_branch} in
+			v4.*)
+				_mongo_unit_scons  ${__args[@]};;
+			v5.*)
+				_mongo_unit_scons ${__args[@]};;
+			v6.*)
+				_mongo_unit_scons ${__args[@]};;
+			v7.*)
+				_mongo_unit_scons ${__args[@]};;
+			v8.0)
+				_mongo_unit_scons ${__args[@]};;
+			*)
+				_mongo_unit_bazel ${__args[@]};;
+		esac
 	)
 }
 
-# Runs the benchmark test 
+######################################################## Benchmark Test ########################################################################
+
+_mongo_benchmark_scons()
+{
+	${__cmd_prefix} mrlog -c -e ninja -- -j12 ./build/install/bin/$__args[1] && 
+	${__cmd_prefix} mrlog -c -e ./build/install/bin/$__args[1] --  --benchmark_out_format=csv --benchmark_out="./$__args[1].csv"
+}
+
+_mongo_benchmark_bazel()
+{
+	echo "mongo-benchmark for bazel not yet implemented";
+}
+
 mongo-benchmark()
 {
 	( set -e;
 		__mongo-check-wrkdir;
 		__mongo-parse-args $@;
+
 		if [[ -z "$__args[1]" ]]; then
 			echo "Usage: mongo-benchmark <benchmark_name>" ;
 			return 1;
 		fi
 
-		${__cmd_prefix} mrlog -c -e ninja -- -j12 ./build/install/bin/$__args[1] && 
-		${__cmd_prefix} mrlog -c -e ./build/install/bin/$__args[1] --  --benchmark_out_format=csv --benchmark_out="./$__args[1].csv"
+		case ${__mongo_branch} in
+			v4.*)
+				_mongo_benchmark_scons $@;;
+			v5.*)
+				_mongo_benchmark_scons $@;;
+			v6.*)
+				_mongo_benchmark_scons $@;;
+			v7.*)
+				_mongo_benchmark_scons $@;;
+			v8.0)
+				_mongo_benchmark_scons $@;;
+			*)
+				_mongo_benchmark_bazel $@;;
+		esac
 
 		#open csv if visual studio code terminal is used
 		[[ "$TERM_PROGRAM" == "vscode" ]] && ${__cmd_prefix} code -r ./$__args[1].csv
 	)
 }
 
-# Deletes all files generated by running `mongo-build` function (i.e.
-# executables and object files). However, it does not delete the files
-# corresponding to the build configuration (i.e. `build.ninja` and
-# `compile_commands.json`).
-#
-# Options:
-#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
-#   - Compiler family: --clang (default), --gcc
-#   - Executables to delete: --all (default), --core
-#   - All those of buildscripts/scons.py
-mongo-clean ()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-	__mongo_variable_path
-
-	${__cmd_prefix} ninja -t clean;
-	${__cmd_prefix} ccache -c
-
-	)
-}
+######################################################## Code Format & lint ########################################################################
 
 # Formats the source code according to the conversion adopted by all development
 # teams.
@@ -271,7 +345,7 @@ mongo-code-analysis()
 	python3 buildscripts/iwyu/run_iwyu_analysis.py
 }
 
-################################################################################# EVERGREEN PATCH ############################################################################################################
+######################################################## Local Test  ########################################################################
 # Runs on the current machine the infrastructure to process the specified
 # JavaScript test. This proposes the last commit comment as a description of the
 # patch, however it also allows to provide a custom message.
@@ -280,18 +354,19 @@ mongo-code-analysis()
 #   - Concurrency: --single-task (default), --multi-task
 #   - All those of buildscripts/resmoke.py
 
-__mongo_test()
+__mongo_test_bazel()
 {
-	${__cmd_prefix} python ./build/install/bin/resmoke.py run \
+	${__cmd_prefix} python buildscripts/resmoke.py run \
 		--storageEngine=wiredTiger \
 		--storageEngineCacheSizeGB=0.5 \
 		--mongodSetParameters="$__log_component_verbosity" \
 		--mongosSetParameters="$__log_component_verbosity" \
 		--jobs=${__tasks} \
 		--log=file \
+		--installDir "$BAZEL_INSTALL_DIR" \
 		$__fcv_opts \
 		$__suite_opts \
-		${__args[@]}
+		$@
 
 		testresult=$?
 
@@ -302,7 +377,47 @@ __mongo_test()
 		fi
 		return ${testresult}
 }
-__mongo_test_cmd_simple()
+
+__mongo_test_scons()
+{
+	${__cmd_prefix} python ./build/install/bin/resmoke.py run \
+		--storageEngine=wiredTiger \
+		--storageEngineCacheSizeGB=0.5 \
+		--mongodSetParameters="$__log_component_verbosity" \
+		--mongosSetParameters="$__log_component_verbosity" \
+		--jobs=${__tasks} \
+		--log=file \
+		$__fcv_opts \
+		$__suite_opts \
+		$@
+
+		testresult=$?
+
+		if [ ${testresult} -eq 0 ]; then
+			echo "OK"
+		else
+			echo "FAILED"
+		fi
+		return ${testresult}
+}
+__mongo_test()
+{
+	case ${__mongo_branch} in
+		v4.*)
+			__mongo_test_scons  ${__args[@]};;
+		v5.*)
+			__mongo_test_scons ${__args[@]};;
+		v6.*)
+			__mongo_test_scons ${__args[@]};;
+		v7.*)
+			__mongo_test_scons ${__args[@]};;
+		v8.0)
+			__mongo_test_scons ${__args[@]};;
+		*)
+			__mongo_test_bazel ${__args[@]};;
+	esac
+}
+__mongo_test_cmd_once()
 {
 	__mongo_test 
 
@@ -367,7 +482,7 @@ mongo-test-locally()
 	#CASE --fcv || none: run the test with default suite and no fcv. Run with --fcv if specified.
 	if [[ -z $__loop_suites ]]; then
 		if [[ -z $__loop_fcv ]]; then
-		 	__mongo_test_cmd_simple; 
+		 	__mongo_test_cmd_once; 
 			return ${testresult} 
 		else
 			#Run test for default suite and for every fcv
@@ -411,57 +526,74 @@ mongo-test-locally()
     )
 }
 
-# Creates a new Evergreen path where it is possible to select the specific
-# suites to run. By default, all required suites are pre-selected.
-#
+######################################################## Evergreen Patch ########################################################################
+
+# Runs an evergreen patch
 # Options:
-#   - All those of evergreen patch
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
 mongo-run-patch ()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	
-	if [[ -z ${__args[1]} ]]; then
-		msg="No description"
-		if [[ ${__cmd_prefix} != echo ]]; then
-			echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
-			read -r _reply;
-			if [[ ${_reply} =~ (y|Y|yes) ]]; then
-				echo "Type the custom title: " 
-				read -r _input_description;
-				msg="$_input_description"
-			fi;
-		fi;
 
+		__preselect='-a required'
+		[[ -n $__burn_in ]] && __preselect='--variants all --tasks burn_in_tags_gen';
 		${__cmd_prefix} evergreen patch \
 				--project mongodb-mongo-${__mongo_branch} \
 				--skip_confirm \
-				-a required \
-				--description "$(git branch --show-current):${msg}" \
+				--auto-description $=__preselect \
+				--finalize \
 				${__args[@]} 
-		[[ -n "$__enterprise" ]] && echo "WARNING DETECTED ENTERPRISE - COPY THE ID OF THE PATCH AND RUN: mongo-run-patch <patch_id>"
-	else
-		if [[ $__enterprise == true ]]; then
-			cd ./src/mongo/db/modules/enterprise
-			${__cmd_prefix} evergreen patch-set-module -m enterprise -i ${__args[1]}
-			cd - 
-		fi
-	fi
+
+	)
+}
+
+# Creates a new Evergreen path where it is possible to select the specific
+# suites to run. 
+# Usage: mongo-set-patch 
+# Options:
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
+mongo-set-patch()
+{
+( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	
+	msg="No description"
+	if [[ ${__cmd_prefix} != echo ]]; then
+		echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
+		read -r _reply;
+		if [[ ${_reply} =~ (y|Y|yes) ]]; then
+			echo "Type the custom title: " 
+			read -r _input_description;
+			msg="$_input_description"
+		fi;
+	fi;
+
+	${__cmd_prefix} evergreen patch \
+			--project mongodb-mongo-${__mongo_branch} \
+			--skip_confirm \
+			-a required ${__finalize} \
+			--description "$(git branch --show-current):${msg}" \
+			${__args[@]} 
+
 	)
 }
 
 #Note: this function could be just added as part of mongo-run-patch
 #However, since the --project option changes, it would become more complex. 
 #Therefore, I decided to keep it separate.
-mongo-run-patch-workload()
+mongo-set-patch-workload()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-check-venv;
     __mongo-parse-args $@;
 
-	if [[ -z "${__args[1]}" ]]; then
+	if [[ -z ${__args[1]} ]]; then
 		_sys_perf="sys-perf"
 		[[ $__mongo_branch != "master" ]] && _sys_perf="sys-perf-${__mongo_branch#*v}"
 
@@ -476,30 +608,41 @@ mongo-run-patch-workload()
 
 }
 
-################################################################################# HELPERS ############################################################################################################
+######################################################## General Utility ########################################################################
 
-mongo-merge ()
+#downloag last LTS and last continuous version of mongo to enable multiversion local testing
+mongo-enable-multiversion()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-		
-	if [[ -z "${__args[1]}" ]]; then
-		echo "ciao"
-		__pause=;
-		[[ -n "$__enterprise" ]] && __pause=" --pause";
-		${__cmd_prefix} evergreen commit-queue merge --project mongodb-mongo-${__mongo_branch} ${__args[@]} $__pause
 
-		[[ -n "$__enterprise" ]] && echo "WARNING DETECTED ENTERPRISE - COPY THE ID OF THE PATCH AND RUN: mongo-merge <patch_id>"
-	else 
-		if [[ $__enterprise == true ]]; then
-			${__cmd_prefix} cd ./src/mongo/db/modules/enterprise
-			${__cmd_prefix} evergreen commit-queue set-module --id ${__args[1]} -m enterprise 
-			${__cmd_prefix} evergreen commit-queue merge --resume ${__args[1]}
-			${__cmd_prefix} cd - 
-		fi;
+	#remove first "v" from __mongo_branch. In case is master => master, in case is vX.Y => X.Y
+	local version=${__mongo_branch#*v}
+	
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} db-contrib-tool setup-repro-env $version --linkDir ./build/install/bin/  --installLastLTS --installLastContinuous )
+}
 
-	fi;
+# Deletes all files generated by running `mongo-build` function (i.e.
+# executables and object files). However, it does not delete the files
+# corresponding to the build configuration (i.e. `build.ninja` and
+# `compile_commands.json`).
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+#   - Compiler family: --clang (default), --gcc
+#   - Executables to delete: --all (default), --core
+#   - All those of buildscripts/scons.py
+mongo-clean-ninja ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	${__cmd_prefix} ninja -t clean;
+	${__cmd_prefix} ccache -c
+
 	)
 }
 
@@ -515,9 +658,7 @@ mongo-debug ()
 	echo __build_mode=${__build_mode};
 	echo __link_model=${__link_model};
 	echo __format=${__format};
-	echo __target=${__target};
 	echo __tasks=${__tasks};
-	echo __enterprise=${__enterprise};
 	echo __fcv_opts=${__fcv_opts};
 	echo __log_component_verbosity=${__log_component_verbosity}
 	echo "MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH}"
@@ -527,7 +668,44 @@ mongo-debug ()
 	echo __args=${__args} )
 }
 
-################################################################################
+# usage: mongo-backport COMMIT_HASH BACKPORT_TICKET --branch vX.Y
+# Note original branch is only used to checkout back to the current branch.
+mongo-backport ()
+{
+	( set -e;
+	__mongo-parse-args $@;
+	__mongo_variable_path 
+
+	CAR_STAFFS=("dgomezferro" "kaloianm" "jordist" "sulabhM")
+	REVIEWER=${CAR_STAFFS[ $RANDOM % ${#CAR_STAFFS[@]} ]}
+
+	COMMIT=${__args[1]}
+	TARGET_BRANCH=$__mongo_branch
+	BACKPORT_TICKET=${__args[2]}
+	git fetch
+	ORIGINAL_BRANCH=`git branch --show-current`
+	git checkout --ignore-other-worktrees $TARGET_BRANCH
+	git pull
+	ORIGINAL_COMMIT_MESSAGE=`git log --format=%B -n 1 $COMMIT`
+	ORIGINAL_TICKET=`echo $ORIGINAL_COMMIT_MESSAGE | sed -n 's/^SERVER-[0-9]*/&/p' | cut -d' ' -f1`
+	BRANCH_NAME=backport/$ORIGINAL_TICKET/$TARGET_BRANCH/$BACKPORT_TICKET
+	git checkout -B $BRANCH_NAME
+	git cherry-pick $COMMIT
+	git push --set-upstream origin $BRANCH_NAME
+	EVG_LINK=`evergreen patch --project mongodb-mongo-$TARGET_BRANCH --alias required --auto-description --yes --finalize | grep Build | sed -E 's;.*(https.*).*;\1;g'`
+	PR_LINK=`gh pr create --base $TARGET_BRANCH --fill --reviewer $REVIEWER --assignee @me | grep https`
+	gh pr comment $PR_LINK --body "[evg](${EVG_LINK})"
+	git checkout $ORIGINAL_BRANCH
+	git branch -d $BRANCH_NAME
+	echo
+	echo
+	echo ========
+	echo Link to the PR: $PR_LINK
+	echo ========
+	)
+}
+
+######################################################## Shared Helpers ########################################################################
 
 ###
 ### Global settings
@@ -537,6 +715,7 @@ MONGO_VENV_DIRNAME=${MONGO_VENV_DIRNAME:-'.venv'}
 ICECC_VAR="ICECC=icecc"
 CCACHE_VAR="CCACHE=ccache"
 JOBS=400
+BAZEL_INSTALL_DIR='./bazel-last-bin'
 
 #do not set icecc if command is not found
 if ! command -v icecc &> /dev/null; then
@@ -626,25 +805,15 @@ __mongo-parse-args ()
 	__cmd_prefix=;
 	__toolchain=clang;
 
-	__build_mode='--opt=on --dbg=on';
+	__build_mode_scons='--opt=on --dbg=on';
+	__build_mode_bazel='--config=fastbuild';
 	__link_model="--link-model=dynamic";
 	__format=0;
-	case ${__mongo_branch} in
-	v4.*)
-		__target=core;;;
-	v5.*)
-		__target=core;;;
-	*)
-		__target=devcore;;;
-	esac
 	__tasks=1;
-	__enterprise=;
-	__modules=;
 	__test_extra_options=;
 	__log_component_verbosity='{logComponentVerbosity: {verbosity: 0}}'
 	__args=();
 
-	[[ -d $PWD/src/mongo/db/modules/enterprise ]] && __enterprise=true;
 	while [[ $# -gt 0 ]]; do
 		case $1 in
 			--echo)
@@ -683,23 +852,33 @@ __mongo-parse-args ()
 				shift
 			;;
 			--debug)
-				__build_mode="--opt=off --dbg=on";
+				__build_mode_scons="--opt=off --dbg=on";
+				__build_mode_bazel="--config=debug";
+				shift
+			;;
+			--opt)
+				__build_mode_scons="--opt=off --dbg=on";
+				__build_mode_bazel="--config=opt";
 				shift
 			;;
 			--benchmark)
-				__build_mode="--opt=on --dbg=on";
+				__build_mode_scons="--opt=off --dbg=off";
+				__build_mode_bazel="--config=fastbuild";
 				shift
 			;;
 			--sanitize-address)
-				__build_mode="--opt=on --dbg=on --sanitize=address --allocator=system";
+				__build_mode_scons="--opt=on --dbg=on --sanitize=address --allocator=system";
+				__build_mode_bazel="--config=dbg_aubsan";
 				shift
 			;;
 			--sanitize-thread)
-				__build_mode="--opt=on --dbg=on --sanitize=thvared";
+				__build_mode_scons="--opt=on --dbg=on --sanitize=thvared";
+				__build_mode_bazel="--config=dbg_tsan";
 				shift
 			;;
 			--release)
-				__build_mode="--opt=on --dbg=off";
+				__build_mode_scons="--opt=on --dbg=off";
+				__build_mode_bazel="--config=fastbuild";
 				shift
 			;;
 			--dynamic)
@@ -716,14 +895,6 @@ __mongo-parse-args ()
 			;;
 			--no-format)
 				__format=0;
-				shift
-			;;
-			--all)
-				__target=all;
-				shift
-			;;
-			--core)
-				__target=core;
 				shift
 			;;
 			--mono-task)
@@ -752,6 +923,14 @@ __mongo-parse-args ()
 				__loop_suites=true;
 				shift
 			;;
+			--burn-in)
+				__burn_in=true;
+				shift;
+			;;
+			--required)
+				__required=true;
+				shift;
+			;;
 			*)
 				__args+=($1);
 				shift
@@ -759,45 +938,3 @@ __mongo-parse-args ()
 		esac;
 	done;
 }
-
-__mongo-configure-ninja ()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-check-venv;
-	__mongo-parse-args $@;
-	__mongo_variable_path
-
-	__modules=;
-	if [[ $__enterprise == true ]]; then
-		__modules="enterprise";
-		echo "[MONGO-WS] enterprised enabled";
-	fi
-	${__cmd_prefix} ./buildscripts/scons.py --modules=$__modules --variables-files=$MONGO_VARIABLE_PATH $=__build_mode ${__link_model} \
-		--ninja generate-ninja "$ICECC_VAR" "$CCACHE_VAR" ${__args[@]}
-	
-	)
-}
-
-__mongo-configure-compilation-db ()
-{
-	( set -e;
-	__mongo-check-wrkdir;
-	__mongo-parse-args $@;
-	__mongo_variable_path
-	${__cmd_prefix} ninja compiledb ${__args[@]}
-	)
-}
-
-############################ git utils
-function checkout
-{
-	( 	
-		set -e;
-		__mongo-check-wrkdir;
-		__mongo-parse-args $@;
-		${__cmd_prefix} git checkout $__mongo_branch
-	)
-}
-
-alias amend="git commit --amend --no-edit"
