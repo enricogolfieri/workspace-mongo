@@ -47,3 +47,28 @@ function mongo-link-to-download-from-build-id
   echo "Open this to link to chrome (needs login) then run mongo-download-binary <link>"
   echo "https://symbolizer-service.server-tig.prod.corp.mongodb.com/find_by_id?build_id=$1"
 }
+
+mongo-data-files-setup()
+{
+	echo "WARN: this will create a virtual environment in the current folder, proceed? [y/N] ";
+	read -r _reply;
+	[[ ${_reply} =~ (y|Y) ]] || return 0;
+
+	__mongo-parse-args $@;
+	${__cmd_prefix} /opt/mongodbtoolchain/${MONGO_TOOLCHAIN_VER}/bin/python3 -m venv ${MONGO_VENV_DIRNAME};
+	${__cmd_prefix} . ${MONGO_VENV_DIRNAME}/bin/activate;
+	${__cmd_prefix} pip install wiredtiger-debug-tools
+
+}
+
+function checkout
+{
+	( 	
+		set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+		${__cmd_prefix} git checkout $__mongo_branch
+	)
+}
+
+alias amend="git commit --amend --no-edit"
