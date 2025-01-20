@@ -27,7 +27,7 @@ case `uname` in
     ;;
 esac
 
-if [[ $(uname -m) == 'arm64' ]]; then
+if [[ $(uname -m) == arm* ]] || [[ $(uname -m) == aarch64 ]]; then
   _is_arm=1
   [ -n $_is_linux ] && _is_arm_linux=1
 fi
@@ -38,4 +38,6 @@ export NINJA_STATUS='[%f/%t (%p) %es] '
 [[ $- == *i* ]] || return
 
 echo "mongo environment activated for $_os"
-
+if [[ $_is_arm ]]; then
+    echo "Detected arm64 architecture"
+fi
