@@ -400,129 +400,113 @@ __mongo_test_scons()
 		fi
 		return ${testresult}
 }
-__mongo_test()
+
+__mongo_test_single()
 {
 	case ${__mongo_branch} in
 		v4.*)
-			__mongo_test_scons  ${__args[@]};;
+			__mongo_test_scons $@;;
 		v5.*)
-			__mongo_test_scons ${__args[@]};;
+			__mongo_test_scons $@;;
 		v6.*)
-			__mongo_test_scons ${__args[@]};;
+			__mongo_test_scons $@;;
 		v7.*)
-			__mongo_test_scons ${__args[@]};;
+			__mongo_test_scons $@;;
 		v8.0)
-			__mongo_test_scons ${__args[@]};;
+			__mongo_test_scons $@;;
 		*)
-			__mongo_test_bazel ${__args[@]};;
+			__mongo_test_bazel $@;;
 	esac
 }
-__mongo_test_cmd_once()
-{
-	__mongo_test 
 
-	rm -rf ./.testdata
-	mkdir -p ./.testdata
-	mrlog ./executor.log > ./.testdata/mr_executor.log
-	mrlog ./fixture.log > ./.testdata/mr_fixture.log
-	mrlog ./tests.log > ./.testdata/mr_tests.log
-}
-__mongo_test_cmd_in_loop()
-{
-	local __suite_opts=;
-	local __fcv="disabled"
-	local __suite="default"
-
-	while [[ $# -gt 0 ]]; do
-		case $1 in
-			--suite)
-				__suite_opts="--suite=$2";
-				__suite=$2;
-				shift;
-				shift;
-			;;
-			--fcv)
-				__fcv_opts="--runAllFeatureFlagTests";
-				__fcv="enabled"
-				shift;
-			;;
-			*)
-				echo "no";
-				shift;
-			;;
-		esac;
-	done;
-
-    echo "RUNNING SUITE $__suite" FCV $__fcv
-
-	__mongo_test
-
-	rm -rf ./.testdata
-	mkdir -p ./.testdata
-	mrlog ./executor.log > ./.testdata/mr_executor_${__suite}_${__fcv}.log
-	mrlog ./fixture.log > ./.testdata/mr_fixture_${__suite}_${__fcv}.log
-	mrlog ./tests.log > ./.testdata/mr_tests_${__suite}_${__fcv}.log
-
-}
-
-mongo-test-locally()
-{
+# Run a single test with default suite
+mongo-test-locally() {
     (set -e
     __mongo-check-wrkdir
     __mongo-check-venv
     __mongo-parse-args $@
 
-   ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
+    ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
     set +e
 
-	echo "[TEST-LOCALLY] started.."
-	[[ -n $__loop_suites ]] && echo "Run all suites? yes"
-	[[ -n $__loop_fcv ]] && echo "Run with and without all feature flags? yes"
+    echo "[TEST-LOCALLY] started.."
+    __mongo_test_single "${__args[@]}"
+    return $?
+    )
+}
 
-	#CASE --fcv || none: run the test with default suite and no fcv. Run with --fcv if specified.
-	if [[ -z $__loop_suites ]]; then
-		if [[ -z $__loop_fcv ]]; then
-		 	__mongo_test_cmd_once; 
-			return ${testresult} 
-		else
-			#Run test for default suite and for every fcv
-			__mongo_test_cmd_in_loop 
-			[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --fcv
-			return ${testresult} 
-		fi
-	fi
+# Run tests in a loop across suites, stopping on first failure
+# Shared test suites arrays
+SHARDING_SUITES=('sharding' 'sharding_last_lts' 'sharding_last_continuous' 'sharding_last_lts_mongos_and_mixed_shards')
+CORE_SUITES=('replica_sets_jscore_passthrough' 'sharding_jscore_passthrough' 'sharded_collections_jscore_passthrough' 'sharding_api_version_jscore_passthrough')
+mongo-test-locally-loop() {
+    (set -e
+    __mongo-check-wrkdir
+    __mongo-check-venv
+    __mongo-parse-args $@
 
-	#CASE --complete || --suite : run for every suite. Run also --fcv in case of --complete for every suite.
-	local __test_non_default_suite=;
-	if [[ -n $__loop_suites ]]; then 
-		for arg in "${__args[@]}"; do
-			if [[ "$arg" == *"jstests/sharding"* ]]; then
-				echo "[TEST-LOCALLY] detected sharding test"
-				local suites=('sharding' 'sharding_last_lts' 'sharding_last_continuous' 'sharding_last_lts_mongos_and_mixed_shards') 
-				__test_non_default_suite=true;
-			elif [[ "$arg" == *"jstests/core"* ]]; then
-				echo "[TEST-LOCALLY] detected core test"
-				local suites=('replica_sets_jscore_passthrough' 'sharding_jscore_passthrough' 'sharded_collections_jscore_passthrough' 'sharding_api_version_jscore_passthrough') 
-				__test_non_default_suite=true
-			fi
-		done
-	fi
+    ${__cmd_prefix} \rm -f executor.log fixture.log tests.log mrtests.log
+    set +e
 
-	if [[ -n $__test_non_default_suite ]]; then
-		#Run test for every suire for every fcv 
-		for suite in "${suites[@]}"; do        
-			__mongo_test_cmd_in_loop --suite $suite 
-			[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --suite $suite --fcv
-		done
-		return ${testresult} 
-	else
-		#Run test on every fcv with default suite
-		echo "[TEST-LOCALLY] not specific test type detect, running default suite"
-		__mongo_test_cmd_in_loop 
-		[[ -n $__loop_fcv ]] && __mongo_test_cmd_in_loop --fcv
-		return ${testresult} 
-	fi
+    echo "[TEST-LOCALLY-LOOP] started.."
+    
+    # Extract test path from arguments
+    local test_path=""
+    for arg in "${__args[@]}"; do
+        if [[ "$arg" == *".js" ]]; then
+            test_path="$arg"
+            break
+        fi
+    done
 
+    if [[ -z "$test_path" ]]; then
+        echo "[TEST-LOCALLY-LOOP] Error: No test file specified"
+        return 1
+    fi
+    
+    # Determine test type and corresponding suites
+    local suites=()
+    for arg in "${__args[@]}"; do
+        if [[ "$arg" == *"jstests/sharding"* ]]; then
+            echo "[TEST-LOCALLY-LOOP] detected sharding test"
+            suites=("${SHARDING_SUITES[@]}")
+            break
+        elif [[ "$arg" == *"jstests/core"* ]]; then
+            echo "[TEST-LOCALLY-LOOP] detected core test"
+            suites=("${CORE_SUITES[@]}")
+            break
+        fi
+    done
+
+    # If no specific test type detected, run with default suite only
+    if [ ${#suites[@]} -eq 0 ]; then
+        echo "[TEST-LOCALLY-LOOP] no specific test type detected, running default suite only"
+        suites=("default")
+    fi
+
+    # Run test for each suite
+    for suite in "${suites[@]}"; do
+        echo -e "\n[TEST-LOCALLY-LOOP] Running suite: \033[1m$suite\033[0m"
+		__suite_opts="--suite=$suite";
+        __mongo_test_single "${__args[@]}"
+        
+        if [ $? -ne 0 ]; then
+            echo -e "\n\033[1;31m[TEST-LOCALLY-LOOP] ❌ Test failed in suite: $suite\033[0m"
+            echo -e "\nTo reproduce this failure, run:"
+            echo -e "\033[1mmongo-test-locally ${test_path} --suite $suite\033[0m"
+            
+            # Save failure info
+            echo "Failed suite: $suite" > ./.testdata/failure_info.txt
+            echo "Reproduction command: mongo-test-locally ${test_path} --suite $suite" >> ./.testdata/failure_info.txt
+            
+            return 1
+        else
+            echo -e "\033[1;32m[TEST-LOCALLY-LOOP] ✓ Suite $suite passed\033[0m"
+        fi
+    done
+
+    echo -e "\n\033[1;32m[TEST-LOCALLY-LOOP] ✓ All suites passed successfully\033[0m"
+    return 0
     )
 }
 
