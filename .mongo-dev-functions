@@ -180,7 +180,7 @@ _mongo_build_bazel()
 	[[ -n $1 ]] && __target=$1;
 	[[ $__target = 'core' ]] && __target="install-devcore";
 	[[ $__target = '--core' ]] && __target="install-devcore";
-	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} ${@:2}
+	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} --verbose_failures ${@:2}
 	#create a symb link to the last build  (will be used by resmoke for testing)
 	${__cmd_prefix} rm -f $BAZEL_INSTALL_DIR
 	${__cmd_prefix} ln -s bazel-bin/$__target/bin $BAZEL_INSTALL_DIR
@@ -232,7 +232,7 @@ _mongo_unit_bazel()
 {
 	if [[ -n $1 ]]; 
 	then
-		${__cmd_prefix} mrlog -c -e bazel -- test +base_test +$1 ${@:2}
+		${__cmd_prefix} mrlog -c -e bazel -- test +$1 ${@:2}
 	else
 		${__cmd_prefix} mrlog -c -e bazel -- test --test_tag_filters=mongo_unittest,-intermediate_target --local_test_jobs=HOST_CPUS //src/...
 	fi
@@ -837,7 +837,7 @@ __mongo-parse-args ()
 			;;
 			--debug)
 				__build_mode_scons="--opt=off --dbg=on";
-				__build_mode_bazel="--config=debug";
+				__build_mode_bazel="--config=dbg";
 				shift
 			;;
 			--opt)

@@ -8,6 +8,15 @@ kill() {
   __launch kill 
 }
 
+venv()
+{
+	if [[ -n ".venv" ]]; then
+		python3 -m venv .venv;
+	fi
+	__enable_python_env
+	pip3 install mtools 
+}
+
 help(){
     echo
     echo -e "\033[1;4;32m""Functions:""\033[0;34m"
@@ -163,7 +172,7 @@ connect()
 	__enable_python_env
 	local port=$1;
 	[[ -z $1 ]] && port=27017;
-	 $__cmd_prefix mongo --port $port && return 0;
+	 $__cmd_prefix mongosh --port $port && return 0;
 }
 
 connect-data-file()
@@ -171,71 +180,20 @@ connect-data-file()
 	pkill -9 mongo
 	pkill -9 mongod
 	echo `mongod --version`
-	echo `mongo --version`
-
-	$__cmd_prefix mongod --port 12332 --dbpath $1 ${@:2} > /tmp/tmp.log &
-	echo "waiting 5 seconds before running console ..." && sleep 5 && mongo --port $_data_file_port
+	echo `mongosh --version`
+	$__cmd_prefix mongod --port 12332 --dbpath $1 --setParameter recoverFromOplogAsStandalone=true > /tmp/tmp.log &
+	echo "waiting 5 seconds before running console ..." && $__cmd_prefix sleep 5 && $__cmd_prefix mongosh --port $_data_file_port
 }
 
 print-oplog()
 {
-	[[ -z $1 ]] && echo "Usage mcluster print-oplog <tag>. tag required to the output file oplog_results_<tag>.json"
-	mongoexport --db=local --collection=oplog.rs --query='{}' --fields='ts,op,ns,o' --sort='{"$natural":-1}' --out=oplog_results_$1.json --host="localhost:$_data_file_port"
+	[[ -z $1 ]] && echo "Usage mcluster print-oplog <tag> <port>. tag required to the output file oplog_results_<tag>.json"
+	[[ -z $2 ]] && echo "Usage mcluster print-oplog <tag> <port>. port required to select the connection"
+
+	mongoexport --db=local --collection=oplog.rs --query='{}' --fields='ts,op,ns,o' --sort='{"$natural":-1}' --out=oplog_results_$1.json --host="localhost:$2"
 }
 
-#create symlink to playground folder in current directory
-pg-init()
-{
-	mkdir -p $_playground_dir
-	ln -s $ws_playground_dir .
-}
 
-# list playgrounds
-pg-ls()
-{
-	ls $_playground_dir || echo "No playgrounds found, please run mcluster pg-init first"
-}
-
-#create new playground
-add-pg()
-{
-	[ -z $1 ] && echo "Create new playground mcluster add-pg <name with no format>"
-	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
-
-	local _file_name="$1.mongodb.js"
-	for file in $_playground_dir/*; do
-		#check if file is a directory
-		if [ -d "$file" ]; then
-			#check if file is a directory and has the same name as the one passed as argument
-			if [ "$file" == "$_playground_dir/$_file_name" ]; then
-				echo "Playground $1 already exists"
-				return 1
-			fi
-		fi
-	done
-	cp $_playground_dir"/template.mongodb.js" $_playground_dir/$_file_name && echo "Created new playground $_file_name"
-}
-
-#remove playground
-rm-pg()
-{
-	[ -z $1 ] && echo "Remove playground mcluster rm-pg <name with no format>"
-	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
-
-	local _file_name="$1.mongodb.js"
-	for file in $_playground_dir/*; do
-		#check if file is a directory
-		if [ -d "$file" ]; then
-			#check if file is a directory and has the same name as the one passed as argument
-			if [ "$file" == "$_playground_dir/$1" ]; then
-				rm -rf $_playground_dir/$_file_name
-				echo "Removed playground $_file_name"
-			fi
-		fi
-	done
-	echo "Playground $_file_name does not exist"
-	return 1
-}
 #private ----------------------------------------
 
 __launch()
@@ -280,6 +238,14 @@ link()
 	while [[ $# -gt 0 ]]; do
 		__folder=;
 		case $1 in
+			".")
+				__add_to_path ./bazel-last-build;
+				shift;
+			;;
+			"")
+				__add_to_path ./bazel-last-build
+				shift;
+			;;
 			--mongo1)
 				__folder="mongo"
 				shift
@@ -292,8 +258,15 @@ link()
 			    __folder="mongo3"
 				shift
 			;;
+			--v*)
+				__mongo_branch=${1#*--}
+				__folder="mongo-$__mongo_branch"
+				shift
+			;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
+				unlink ~/.local/bin
+				unlink ~/.local/lib
 				m $1
 				shift
 			;;
@@ -302,12 +275,14 @@ link()
 
 	[[ -z $__folder ]] && exit 0;
 
-	echo "provided custom master folder ~/$__folder/build/install/bin/"
-	rm -rf ~/.local/bin/* 
-	rm -rf ~/.local/lib/*
-	cp -r ~/$__folder/build/install/bin/* ~/.local/bin 
-	echo "~/$__folder/build/install/bin installed! Installing libs ..."
-	cp -r ~/$__folder/build/install/lib/* ~/.local/lib 
+	echo "provided custom master folder ~/$__folder/bazel-last-bin/"
+	unlink ~/.local/bin/mongod
+	unlink ~/.local/bin/mongos
+	unlink ~/.local/lib 
+	ln -s ~/$__folder/bazel-last-bin/mongod ~/.local/bin/mongod || return 1;
+	ln -s ~/$__folder/bazel-last-bin/mongos ~/.local/bin/mongos || return 1;
+	echo "~/$__folder/bazel-last-bin/ installed! Installing libs ...";
+	#ln -s ~/$__folder/build/install/lib ~/.local/lib || return 1;
 	echo "~/$__folder/build/install/lib installed!"
 
 }
@@ -315,8 +290,6 @@ link()
 __parse_args()
 {
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
-
-	__add_to_path ./build/install/bin
 
 	__cmd_prefix=;
 	__dir="$HOME/.mcluster/cdata/"
