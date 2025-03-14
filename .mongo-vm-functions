@@ -153,13 +153,20 @@ mongo-update-tools()
     cd $_cws
 }
 
+mongo-setup-repo()
+{
+    #provide the branch, master if not specified 
+    local _branch=$1
+    [ -z "$_branch" ] && _branch="master"
+
+    git clone git@github.com:10gen/mongo
+}
+
 mongo-setup-repos()
 {
-    _mongo_setup_old_repo v4.4
-    _mongo_setup_old_repo v5.0
-    _mongo_setup_old_repo v6.0
-    _mongo_setup_old_repo v7.0
-    _mongo_setup_old_repo v8.0
+    mongo_setup-repo-version v6.0
+    mongo_setup-repo-version v7.0
+    mongo_setup-repo-version v8.0
     [ -d "~/mongo" ] ||  git clone git@github.com:10gen/mongo ~/mongo
     [ -d "~/mongo2" ] ||  git clone git@github.com:10gen/mongo ~/mongo2
     [ -d "~/mongo3" ] ||  git clone git@github.com:10gen/mongo ~/mongo3
@@ -169,6 +176,25 @@ mongo-setup-repos()
         git clone git@github.com:10gen/workloads.git $HOME/workload
     fi
 }
+
+mongo-setup-main-repo()
+{
+    git clone git@github.com:10gen/mongo ~/mongo
+}
+
+mongo_setup-repo-version()
+{   
+    local _ver=$1
+    local _folder=$HOME/mongo-$_ver
+
+    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
+
+    git clone git@github.com:10gen/mongo $_folder &&
+    cd $_folder &&
+    git checkout $_ver &&
+    cd $HOME
+}
+
 
 mongo-setup-dsi()
 {
@@ -212,18 +238,5 @@ mongo-free-memory()
 	rm -rf ~/mongo*/dump*
 }
 
-## private
-_mongo_setup_old_repo()
-{   
-    local _ver=$1
-    local _folder=$HOME/mongo-$_ver
-
-    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
-
-    git clone git@github.com:10gen/mongo $_folder &&
-    cd $_folder &&
-    git checkout $_ver &&
-    cd $HOME
-}
 
 
