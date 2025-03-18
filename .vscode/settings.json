@@ -1,5 +1,16 @@
 {
-    "workbench.colorCustomizations": {
+    "peacock.remoteColor": "#215732",
+    "files.associations": {
+        "*.aliases": "shellscript",
+        "*.profile": "shellscript",
+        "*.zprofile": "shellscript",
+        "*.zshrc": "shellscript",
+        "*.bashrc": "shellscript",
+        "*.bash": "shellscript",
+        "*.zsh": "shellscript",
+        "*.mongo-*": "shellscript"
+      },
+      "workbench.colorCustomizations": {
         "activityBar.activeBackground": "#2f7c47",
         "activityBar.background": "#2f7c47",
         "activityBar.foreground": "#e7e7e7",
@@ -17,16 +28,5 @@
         "titleBar.activeForeground": "#e7e7e7",
         "titleBar.inactiveBackground": "#21573299",
         "titleBar.inactiveForeground": "#e7e7e799"
-    },
-    "peacock.remoteColor": "#215732",
-    "files.associations": {
-        "*.aliases": "shellscript",
-        "*.profile": "shellscript",
-        "*.zprofile": "shellscript",
-        "*.zshrc": "shellscript",
-        "*.bashrc": "shellscript",
-        "*.bash": "shellscript",
-        "*.zsh": "shellscript",
-        "*.mongo-*": "shellscript"
       }
 }

@@ -85,69 +85,6 @@ init-from-url()
 	fi
 }
 
-init-from-dbpath()
-{
-	#if cluster already present, ask for confirmation
-	__enable_python_env
-
-	echo "Checking if cluster already present in $__dir"
-	[[ -d $__dir ]] && read -p "Cluster already present, are you sure you want to overwrite it? [y/n]" && [[ $REPLY =~ ^[Yy]$ ]] || return 1;
-
-	clean
-	_dbpath=$1
-	[[ -z $_dbpath ]] && echo "Please run mcluster init-from-dbpath <dbpath>" && return 1;
-	__enable_python_env
-
-	_numshardnode=$(find $1/shard0 -maxdepth 1 -type d|wc -l)
-	_numshardnode=$(echo $_numshardnode -1 | bc )
-	_numshards=$(find $1/shard* -maxdepth 0 -type d|wc -l) 
-	_numcsrsnode=$(find $1/config* -maxdepth 1 -type d|wc -l)
-	_numcsrsnode=$(echo $_numcsrsnode -1 | bc )
-
-	#generate a 
-	__init --replicaset --nodes $_numshardnode --sharded $_numshards --config $_numcsrsnode $@
-	kill #kill all processes 
-	echo "Copying data from $_dbpath to $__dir"
-	for d in "$_dbpath"/*; do
-		#copy shards data
-		#check if d is config
-		if [[ $d == *"config"* ]]; then
-			#copy config data
-			for countc in $(seq 0 $_numcsrsnode); do
-				local countrs=$(echo $countc + 1 | bc);
-				local from_dir="$d/node$countc"
-				local to_dir="$__dir/configRepl/rs$countrs/db"
-				echo "Found $from_dir"
-				if [ -d "$from_dir" ]; then
-					echo "Copying from $from_dir to $to_dir"
-					cp -r $from_dir $to_dir
-				fi
-			done
-		else
-			for countn in $(seq 0 $_numshardnode); do
-				#move from dbpath/shard0/node0 to _dir/shard01/rs1/db 
-				#move from dbpath/shard0/node1 to _dir/shard01/rs2/db
-				#move from dbpath/shard1/node0 to _dir/shard02/rs1/db
-				#etc... 
-				local countrs=$(echo $countn + 1 | bc);
-				#get shard number: extract last number from string and remove leading zeros, then add 1
-				local counts=$(echo $d | grep -o '[0-9]\+' | tail -1)
-				local counts=$(echo $counts + 1 | bc);
-				local from_dir="$d/node$countn"
-				local to_dir="$__dir/shard0$counts/rs$countrs/db"
-				echo "Found $from_dir"
-				if [[ -d "$from_dir" ]]; then
-					echo "Copying from $from_dir to $to_dir"
-					cp -r $from_dir $to_dir
-				fi
-			done
-		fi
-	done
-
-	#start again cluster
-	start
-}
-
 start()
 {
 	__enable_python_env
@@ -164,59 +101,6 @@ connect()
 }
 
 
-#create symlink to playground folder in current directory
-pg-init()
-{
-	mkdir -p $_playground_dir
-	ln -s $ws_playground_dir .
-}
-
-# list playgrounds
-pg-ls()
-{
-	ls $_playground_dir || echo "No playgrounds found, please run mcluster pg-init first"
-}
-
-#create new playground
-add-pg()
-{
-	[ -z $1 ] && echo "Create new playground mcluster add-pg <name with no format>"
-	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
-
-	local _file_name="$1.mongodb.js"
-	for file in $_playground_dir/*; do
-		#check if file is a directory
-		if [ -d "$file" ]; then
-			#check if file is a directory and has the same name as the one passed as argument
-			if [ "$file" == "$_playground_dir/$_file_name" ]; then
-				echo "Playground $1 already exists"
-				return 1
-			fi
-		fi
-	done
-	cp $_playground_dir"/template.mongodb.js" $_playground_dir/$_file_name && echo "Created new playground $_file_name"
-}
-
-#remove playground
-rm-pg()
-{
-	[ -z $1 ] && echo "Remove playground mcluster rm-pg <name with no format>"
-	[ -d $_playground_dir ] || echo "No playgrounds found, please run mcluster pg-init first"
-
-	local _file_name="$1.mongodb.js"
-	for file in $_playground_dir/*; do
-		#check if file is a directory
-		if [ -d "$file" ]; then
-			#check if file is a directory and has the same name as the one passed as argument
-			if [ "$file" == "$_playground_dir/$1" ]; then
-				rm -rf $_playground_dir/$_file_name
-				echo "Removed playground $_file_name"
-			fi
-		fi
-	done
-	echo "Playground $_file_name does not exist"
-	return 1
-}
 #private ----------------------------------------
 
 __launch()

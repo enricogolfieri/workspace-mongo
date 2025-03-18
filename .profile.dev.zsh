@@ -35,11 +35,10 @@ export NINJA_STATUS='[%f/%t (%p) %es] '
 # MongoDB Toolchain
 #This will also overwrite your local python3
 if [ -d "/opt/mongodbtoolchain" ]; then
-    export PATH="/opt/mongodbtoolchain/v4/bin:$PATH"
+    export PATH="/opt/mongodbtoolchain/v5/bin:$PATH"
 fi
 
 #Do not print in case of non-interactive shell
 [[ $- == *i* ]] || return
 
 echo "mongo environment activated for $_os"
-
