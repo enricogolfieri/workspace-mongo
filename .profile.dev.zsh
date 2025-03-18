@@ -1,11 +1,13 @@
 #add mongofunction
 source $mongows/.mongo-dev-functions
 source $mongows/.mongo-evg-functions
+source $mongows/.mongo-help-functions
 
 # Env variables
 export PATH="$mongows/bashscripts:$PATH"
 _mongo_tools="$HOME/mongo-tools"
 _ctool_path="$_mongo_tools"/ctools
+_employee_repo="$HOME/employee"
 
 ### Compute _os variable
 _os="Linux";
@@ -25,7 +27,7 @@ case `uname` in
     ;;
 esac
 
-if [[ $(uname -m) == 'arm64' ]]; then
+if [[ $(uname -m) == arm* ]] || [[ $(uname -m) == aarch64 ]]; then
   _is_arm=1
   [ -n $_is_linux ] && _is_arm_linux=1
 fi

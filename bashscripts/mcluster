@@ -1,11 +1,20 @@
 #!/bin/bash
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
-
+_data_file_port=12332
 kill() {
 	__enable_python_env
   echo "About to kill all processes" 
   __launch kill 
+}
+
+venv()
+{
+	if [[ -n ".venv" ]]; then
+		python3 -m venv .venv;
+	fi
+	__enable_python_env
+	pip3 install mtools 
 }
 
 help(){
@@ -97,7 +106,7 @@ connect()
 	__enable_python_env
 	local port=$1;
 	[[ -z $1 ]] && port=27017;
-	 $__cmd_prefix mongo --port $port && return 0;
+	 $__cmd_prefix mongosh --port $port && return 0;
 }
 
 
@@ -140,12 +149,63 @@ __add_to_path ()
     export PATH=${1}:$PATH
 }
 
+link()
+{
+	while [[ $# -gt 0 ]]; do
+		__folder=;
+		case $1 in
+			".")
+				__add_to_path ./bazel-last-build;
+				shift;
+			;;
+			"")
+				__add_to_path ./bazel-last-build
+				shift;
+			;;
+			--mongo1)
+				__folder="mongo"
+				shift
+			;;
+			--mongo2)
+				__folder="mongo2"
+				shift
+			;;
+			--mongo3)
+			    __folder="mongo3"
+				shift
+			;;
+			--v*)
+				__mongo_branch=${1#*--}
+				__folder="mongo-$__mongo_branch"
+				shift
+			;;
+			*)
+				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
+				unlink ~/.local/bin
+				unlink ~/.local/lib
+				m $1
+				shift
+			;;
+		esac;
+	done;
+
+	[[ -z $__folder ]] && exit 0;
+
+	echo "provided custom master folder ~/$__folder/bazel-last-bin/"
+	unlink ~/.local/bin/mongod
+	unlink ~/.local/bin/mongos
+	unlink ~/.local/lib 
+	ln -s ~/$__folder/bazel-last-bin/mongod ~/.local/bin/mongod || return 1;
+	ln -s ~/$__folder/bazel-last-bin/mongos ~/.local/bin/mongos || return 1;
+	echo "~/$__folder/bazel-last-bin/ installed! Installing libs ...";
+	#ln -s ~/$__folder/build/install/lib ~/.local/lib || return 1;
+	echo "~/$__folder/build/install/lib installed!"
+
+}
+
 __parse_args()
 {
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
-
-	__add_to_path ./build/debug/install/bin
-	__add_to_path ./build/install/bin
 
 	__cmd_prefix=;
 	__dir="$HOME/.mcluster/cdata/"

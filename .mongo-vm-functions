@@ -34,17 +34,6 @@ mongo-setup-tools()
         cargo install --path .
     fi 
 
-	#install mark-benvenuto extension
-    _mark_benvenuto_extesion_path="$_mongo_tools"/mongodev
-    if [[ ! -d "$_mark_benvenuto_extesion_path" ]]; then
-       	git clone git@github.com:markbenvenuto/mongodev.git $_mark_benvenuto_extesion_path && \
-        cd $_mark_benvenuto_extesion_path && \
-        npm install && npm run compile
-    fi
-
-    mkdir -p "$HOME/.vscode/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode/extensions/markbenvenuto.mongodev-0.0.1;
-    mkdir -p "$HOME/.vscode-server/extensions" && ln -s $_mark_benvenuto_extesion_path $HOME/.vscode-server/extensions/markbenvenuto.mongodev-0.0.1;
-
     #install db-contrib-tool
     if [[ ! -d ""$_mongo_tools"/db-contrib-tool" ]]; then
         git clone git@github.com:10gen/db-contrib-tool.git "$_mongo_tools"/db-contrib-tool
@@ -55,8 +44,97 @@ mongo-setup-tools()
         git clone https://github.com/kaloianm/workscripts.git "$_ctool_path"
     fi
 
-    #configure icecc
-    mongo-setup-icecc
+    #install evg list from pierlauro
+    if [[ ! -d "$_mongo_tools/evgls" ]]; then
+        git clone https://github.com/pierlauro/evg_group_failures_by_test.git $_mongo_tools/evgls
+        cd $_mongo_tools/evgls
+        npm install 
+        cd -
+    fi
+
+    #Install employees repo
+    if [[ ! -d "$_employee_repo" ]]; then
+        git clone git@github.com:10gen/employees.git $_employee_repo
+    fi
+
+    #Install m
+    npm install -g m
+}
+
+mongo-setup-vscode-plugins()
+{   
+    #MARK BENVENUTO
+    # (nvm use --lts) || echo "Please run `nvm install --lts` before running this script"
+
+	# #install mark-benvenuto extension
+    # _out_mongodev="/tmp/mongodev"
+    # rm -rf $_out_mongodev
+
+    # git clone git@github.com:markbenvenuto/mongodev.git $_out_mongodev
+    # cd $_out_mongodev && \
+    # npm install && npm run compile
+    # cd -
+
+    #WOLFEE
+    if [[ ! -d "$_employee_repo" ]] then;
+         echo "Run mongo-setup-tools to install employees repo" 
+         return 1;
+    fi
+    (nvm use --lts) || echo "Please run `nvm install --lts` before running this script"
+
+    #update employee repo
+    git pull $_employee_repo
+
+    rm -rf /tmp/wolfee.mongodb-test-explorer
+    cp -r $_employee_repo/home/wolfee/mongodb-test-explorer /tmp/wolfee.mongodb-test-explorer
+
+    cd /tmp/wolfee.mongodb-test-explorer && \
+    sudo npm install -g @vscode/vsce && vsce package
+    cd -
+}
+
+# mongosh, mongoexport etc...
+mongo-setup-user-tools()
+{
+    _link=;
+    if [[ -n "$_is_linux" ]] ; then
+        if [[ -n "$_is_arm" ]] ; then 
+            _link="https://fastdl.mongodb.org/tools/db/mongodb-database-tools-amazon2023-aarch64-100.9.5.tgz"
+        else
+            echo "[mongo-install-user-tools] Missing link for linux x86_64 , please seach it on the doc"
+            return 1;
+        fi
+    elif [[ -n "$_is_macos" ]] ; then
+            echo "[mongo-install-user-tools] Missing link for macos , please seach it on the doc"
+            return 1;
+    fi
+
+    curl $_link --output /tmp/user-tools.tgz 
+    mkdir -p /tmp/user-tools-output
+    tar -zxvf /tmp/user-tools.tgz -C /tmp/user-tools-output --strip-components=1
+
+    #install
+    cp /tmp/user-tools-output/bin/* /usr/local/bin/
+}
+
+mongo-setup-mongosh()
+{
+    if [[ -n "$_is_linux" ]] ; then
+        sudo apt-get install gnupg
+        curl -fsSL https://pgp.mongodb.com/server-6.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-6.0.gpg --dearmor
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/6.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+        sudo apt-get update
+        sudo apt-get install -y mongodb-mongosh
+    elif [[ -n "$_is_macos" ]] ; then
+        brew install mongosh
+    fi
+}
+
+mongo-setup-wt()
+{
+    git clone https://github.com/wiredtiger/wiredtiger.git ~/wiredtiger 
+    cd ~/wiredtiger && mkdir build && cd build 
+    cmake ../. -G Ninja && ninja -j8 && sudo ninja install 
 }
 
 mongo-update-tools()
@@ -75,12 +153,20 @@ mongo-update-tools()
     cd $_cws
 }
 
+mongo-setup-repo()
+{
+    #provide the branch, master if not specified 
+    local _branch=$1
+    [ -z "$_branch" ] && _branch="master"
+
+    git clone git@github.com:10gen/mongo
+}
+
 mongo-setup-repos()
 {
-    _mongo_setup_old_repo v4.4
-    _mongo_setup_old_repo v5.0
-    _mongo_setup_old_repo v6.0
-    _mongo_setup_old_repo v7.0
+    mongo_setup-repo-version v6.0
+    mongo_setup-repo-version v7.0
+    mongo_setup-repo-version v8.0
     [ -d "~/mongo" ] ||  git clone git@github.com:10gen/mongo ~/mongo
     [ -d "~/mongo2" ] ||  git clone git@github.com:10gen/mongo ~/mongo2
     [ -d "~/mongo3" ] ||  git clone git@github.com:10gen/mongo ~/mongo3
@@ -90,6 +176,25 @@ mongo-setup-repos()
         git clone git@github.com:10gen/workloads.git $HOME/workload
     fi
 }
+
+mongo-setup-main-repo()
+{
+    git clone git@github.com:10gen/mongo ~/mongo
+}
+
+mongo_setup-repo-version()
+{   
+    local _ver=$1
+    local _folder=$HOME/mongo-$_ver
+
+    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
+
+    git clone git@github.com:10gen/mongo $_folder &&
+    cd $_folder &&
+    git checkout $_ver &&
+    cd $HOME
+}
+
 
 mongo-setup-dsi()
 {
@@ -118,24 +223,20 @@ mongo-setup-dsi()
     echo "Done! please now run ./run-dsi onboarding and follow instructions"
 }
 
+mongo-setup-clang-latest-build()
+{
+    if read -q "This might take up to 1h, continue ? Y/y"; then
+        git clone https://github.com/llvm/llvm-project.git $HOME/llvm-project && cd $HOME/llvm-project && mkdir build && cmake -S llvm -B build -G Ninja \
+        -DLLVM_ENABLE_PROJECTS='clang;clang-tools-extra' \
+        -DCMAKE_BUILD_TYPE=Release && cmake --build build --target 'clang;clang-tidy;clang-format;clangd'
+    fi
+}
+
 mongo-free-memory()
 {	
 	rm -rf /tmp/* 
 	rm -rf ~/mongo*/dump*
 }
 
-## private
-_mongo_setup_old_repo()
-{   
-    local _ver=$1
-    local _folder=$HOME/mongo-$_ver
-
-    [ -d $_folder ] && echo "$_folder already exist, skipping cloning of $_ver" && return 1;
-
-    git clone git@github.com:10gen/mongo $_folder &&
-    cd $_folder &&
-    git checkout $_ver &&
-    cd $HOME
-}
 
 

@@ -197,5 +197,8 @@
         "activityBar.background": "#1D312C",
         "titleBar.activeBackground": "#29453E",
         "titleBar.activeForeground": "#FAFCFB"
-    }
+    },
+    "mongodb-test-explorer.ninjaPath": "${workspaceFolder}/.venv/bin/ninja",
+    "mongodb-test-explorer.pythonPath":	"${workspaceFolder}/.venv/bin/python",
+    "mongodb-test-explorer.debugConfiguration": "debug test"
 }

@@ -6,86 +6,76 @@
     "compounds": [],
     "inputs": [
         {
-            "type": "promptString",
-            "id": "testBinary",
-            "description": "Unit-test executable."
+            "id": "pickDumpFile",
+            "type": "command",
+            "command": "extension.commandvariable.file.pickFile",
+            "args": {
+                "description": "Pick a core dump file",
+                "include": "*/.core"
+            }
         },
         {
-            "type": "promptString",
-            "id": "testSuite",
-            "description": "Unit-test suite."
-        },
-        {
-            "type": "promptString",
-            "id": "testName",
-            "description": "Unit-test name."
-        },
-        {
-            "type": "pickString",
-            "id": "processBinary",
-            "description": "Process executable.",
-            "options": [
-                "mongod",
-                "mongos",
-                "db_s_shard_server_test",
-                "db_s_config_server_test",
-                "s_test"
-            ],
-            "default": "mongod"
-        },
-        {
-            "type": "pickString",
-            "id": "buildVariant",
-            "description": "Select build variant.",
-            "options": [
-                "debug",
-                ""
-            ],
-            "default": ""
-        },
-        {
-            "type": "promptString",
-            "id": "processId",
-            "description": "Process ID."
-        },
-        {
-            "type": "promptString",
-            "id": "debugServerPort",
-            "description": "Remote debugging server port."
-        },
-        {
-            "type": "promptString",
-            "id": "coreDumpFile",
-            "description": "Workspace-relative path to core dump file."
+            "type": "command",
+            "id": "runTargets",
+            "command": "shellCommand.execute",
+            "args": {
+            "command": "bazel query 'attr(tags, \"mongo_binary\", //...)' union 'attr(tags, \"mongo_unittest\", //...)' | grep mongo | grep -v \"_with_debug\" | grep -v third_party | sed 's;//;bazel-bin/;g' | sed 's;:;/;g'",                
+            "cwd": "${workspaceFolder}"
+            }
         },
     ],
     "configurations": [
-
-
         {
-            "name": "lldb: attach",
-            "type": "lldb",
-            "request": "attach",
-            "program": "${workspaceFolder}/build/${input:buildVariant}/install/bin/${input:processBinary}",
-            "pid": "${command:pickMyProcess}", // use ${command:pickProcess} to pick other users' processes
-            "postRunCommands": [
-                "process handle --notify false --pass false --stop false SIGSTOP", // ignore SIGSTOP
-                // "process handle --notify false --pass false --stop false SIGVTALRM", // ignore SIGVTALRM
+            "name": "debug gdb",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/${input:runTargets}",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "text": "set verbose",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "set directories ${workspaceFolder}",
+                    "ignoreFailures": false
+                },
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo.py",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/optimizer_printers.py",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo_printers.py",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/mongo_lock.py",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/buildscripts/gdb/wt_dump_table.py",
+                    "ignoreFailures": false
+                },
+                {
+                    "text": "source ${workspaceFolder}/src/third_party/immer/dist/tools/gdb_pretty_printers/autoload.py",
+                    "ignoreFailures": false
+                },
             ],
-        },
-        {
-            "name": "lldb: launch",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/${input:buildVariant}/install/bin/${input:processBinary}",
-            "stopOnEntry": true
-        },
-        {
-            "name": "lldb: mongod",
-            "type": "lldb",
-            "request": "launch",
-            "program": "${workspaceFolder}/build/${input:buildVariant}/install/bin/mongod",
-            "stopOnEntry": true,
+            "miDebuggerPath": "/opt/mongodbtoolchain/v4/bin/gdb",
         }
     ]
 }

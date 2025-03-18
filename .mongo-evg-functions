@@ -61,6 +61,12 @@ function mongo-group-failing-tests() {
           }}'
 }
 
+function mongo-evg-ls()
+{   
+    [[ -z $1 ]] && echo "missing patch-id mongo-evg-ls <patch_id>" && return 1;
+    nodejs $_mongo_tools/evgls/evg_get_failing_tests.js --patch_id $1 > ./evgls
+}
+
 #download $1 log link into your workstation and then to your laptop
 mongo-download-evg-logs() {
     _workstation="mongo-ws"
