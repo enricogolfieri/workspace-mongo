@@ -2,19 +2,30 @@
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
 _data_file_port=12332
+MCLUSTER_FOLDER=$HOME/.mcluster
+VENV=$HOME/.mcluster/.venv
 kill() {
 	__enable_python_env
   echo "About to kill all processes" 
   __launch kill 
 }
 
+check-py()
+{
+	__enable_python_env
+	which python3
+}
 venv()
 {
-	if [[ -n ".venv" ]]; then
-		python3 -m venv .venv;
+	if [[ -n "$VENV" ]]; then
+		python3 -m venv $VENV;
 	fi
 	__enable_python_env
 	pip3 install mtools 
+	pip3 install psutil
+	pip3 install packaging
+	pip3 install python-dateutil
+	pip3 install pymongo
 }
 
 help(){
@@ -80,25 +91,12 @@ init-cluster()
 	__init --replicaset --nodes 3 --sharded 2 --config 3 $@
 }
 
-init-from-url()
-{
-	__enable_python_env
-	$_url=$__args[0]
-	[[ -z $_url ]] && echo "Please run mcluster init-from-url <url>" && return 1;
-	regex='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
-	if [[ $_url =~ $regex ]]; then
-		wget -O - $_url | tar xzvf - -C /tmp
-		init-from-dbpath "/tmp/data/db/job0/resmoke/"
-	else
-		echo "Invalid url"
-	fi
-}
-
 start()
 {
 	__enable_python_env
 	__launch start --dir $__dir
 }
+
 connect()
 {
 	echo "connecting to $1"
@@ -126,7 +124,7 @@ __init()
 __enable_python_env()
 {
 	echo "enabling python env"
-	$__cmd_prefix . .venv/bin/activate
+	$__cmd_prefix . $VENV/bin/activate
 }
 
 __set()
@@ -208,8 +206,7 @@ __parse_args()
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
 	__cmd_prefix=;
-	__dir="$HOME/.mcluster/cdata/"
-	_playground_dir="$HOME/.mcluster/pg"
+	__dir="$MCLUSTER_FOLDER/cdata/"
 	__cmd=;
 	__args=;
 
