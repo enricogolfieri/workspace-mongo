@@ -15,6 +15,14 @@ check-py()
 	__enable_python_env
 	which python3
 }
+
+check-mongod()
+{
+	__enable_python_env
+	source $VENV/.mongo_paths
+	which mongod
+}
+
 venv()
 {
 	if [[ -n "$VENV" ]]; then
@@ -118,6 +126,7 @@ __launch()
 __init()
 {
 	echo "ready to init..."
+	source $VENV/.mongo_paths
 	__launch init $@ 
 }
 
@@ -145,6 +154,7 @@ __add_to_path ()
         return 0
     fi
     export PATH=${1}:$PATH
+	echo $PATH
 }
 
 link()
@@ -152,53 +162,35 @@ link()
 	while [[ $# -gt 0 ]]; do
 		__folder=;
 		case $1 in
-			".")
-				__add_to_path ./bazel-last-build;
-				shift;
-			;;
-			"")
-				__add_to_path ./bazel-last-build
-				shift;
-			;;
+            ".")
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
+                shift;
+            ;;
+            "")
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
+                shift;
+            ;;
 			--mongo1)
-				__folder="mongo"
+                echo "export PATH=~/mongo/bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			--mongo2)
-				__folder="mongo2"
+                echo "export PATH=~/mongo2/bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			--mongo3)
-			    __folder="mongo3"
-				shift
-			;;
-			--v*)
-				__mongo_branch=${1#*--}
-				__folder="mongo-$__mongo_branch"
+                echo "export PATH=~/mongo3/bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
-				unlink ~/.local/bin
-				unlink ~/.local/lib
 				m $1
 				shift
 			;;
 		esac;
 	done;
 
-	[[ -z $__folder ]] && exit 0;
-
-	echo "provided custom master folder ~/$__folder/bazel-last-bin/"
-	unlink ~/.local/bin/mongod
-	unlink ~/.local/bin/mongos
-	unlink ~/.local/lib 
-	ln -s ~/$__folder/bazel-last-bin/mongod ~/.local/bin/mongod || return 1;
-	ln -s ~/$__folder/bazel-last-bin/mongos ~/.local/bin/mongos || return 1;
-	echo "~/$__folder/bazel-last-bin/ installed! Installing libs ...";
-	#ln -s ~/$__folder/build/install/lib ~/.local/lib || return 1;
-	echo "~/$__folder/build/install/lib installed!"
-
+	echo "Success!"
 }
 
 __parse_args()
