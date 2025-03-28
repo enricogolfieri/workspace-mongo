@@ -587,6 +587,9 @@ mongo-set-patch-workload()
 
 }
 
+alias mongo-spin-cluster='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster.js'
+
+
 ######################################################## General Utility ########################################################################
 
 #downloag last LTS and last continuous version of mongo to enable multiversion local testing

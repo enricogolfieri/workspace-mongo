@@ -87,7 +87,6 @@ init-replica()
 init-lite()
 {
 	__enable_python_env
-
 	__init --replicaset --nodes 1 --sharded 2 $@
 
 }
