@@ -14,6 +14,11 @@ services:
       - dev-mongo-evg-yml:/root/.evergreen.yml
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
+      - ${WORKSPACE_PATH:-$HOME/.workspace}:/root/workspace
+      - ${ZSHRC_PATH:-$HOME/.zshrc}:/root/.zshrc
+      - ${ZSHENV_PATH:-$HOME/.zshenv}:/root/.zshenv
+      - ${GITCONFIG_PATH:-$HOME/.gitconfig}:/root/.gitconfig
+      - ${GITIGNORE_PATH:-$HOME/.gitignore}:/root/.gitignore
     environment:
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
 volumes:
