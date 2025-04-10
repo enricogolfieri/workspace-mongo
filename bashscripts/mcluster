@@ -2,19 +2,38 @@
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
 ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
 _data_file_port=12332
+MCLUSTER_FOLDER=$HOME/.mcluster
+VENV=$HOME/.mcluster/.venv
 kill() {
 	__enable_python_env
   echo "About to kill all processes" 
   __launch kill 
 }
 
+check-py()
+{
+	__enable_python_env
+	which python3
+}
+
+check-mongod()
+{
+	__enable_python_env
+	source $VENV/.mongo_paths
+	which mongod
+}
+
 venv()
 {
-	if [[ -n ".venv" ]]; then
-		python3 -m venv .venv;
+	if [[ -n "$VENV" ]]; then
+		python3 -m venv $VENV;
 	fi
 	__enable_python_env
 	pip3 install mtools 
+	pip3 install psutil
+	pip3 install packaging
+	pip3 install python-dateutil
+	pip3 install pymongo
 }
 
 help(){
@@ -68,7 +87,6 @@ init-replica()
 init-lite()
 {
 	__enable_python_env
-
 	__init --replicaset --nodes 1 --sharded 2 $@
 
 }
@@ -80,25 +98,12 @@ init-cluster()
 	__init --replicaset --nodes 3 --sharded 2 --config 3 $@
 }
 
-init-from-url()
-{
-	__enable_python_env
-	$_url=$__args[0]
-	[[ -z $_url ]] && echo "Please run mcluster init-from-url <url>" && return 1;
-	regex='(https?|ftp|file)://[-[:alnum:]\+&@#/%?=~_|!:,.;]*[-[:alnum:]\+&@#/%=~_|]'
-	if [[ $_url =~ $regex ]]; then
-		wget -O - $_url | tar xzvf - -C /tmp
-		init-from-dbpath "/tmp/data/db/job0/resmoke/"
-	else
-		echo "Invalid url"
-	fi
-}
-
 start()
 {
 	__enable_python_env
 	__launch start --dir $__dir
 }
+
 connect()
 {
 	echo "connecting to $1"
@@ -120,13 +125,14 @@ __launch()
 __init()
 {
 	echo "ready to init..."
+	source $VENV/.mongo_paths
 	__launch init $@ 
 }
 
 __enable_python_env()
 {
 	echo "enabling python env"
-	$__cmd_prefix . .venv/bin/activate
+	$__cmd_prefix . $VENV/bin/activate
 }
 
 __set()
@@ -147,6 +153,7 @@ __add_to_path ()
         return 0
     fi
     export PATH=${1}:$PATH
+	echo $PATH
 }
 
 link()
@@ -154,53 +161,36 @@ link()
 	while [[ $# -gt 0 ]]; do
 		__folder=;
 		case $1 in
-			".")
-				__add_to_path ./bazel-last-build;
-				shift;
-			;;
-			"")
-				__add_to_path ./bazel-last-build
-				shift;
-			;;
+            ".")
+                echo "export PATH=./bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
+                shift;
+            ;;
+            "")
+                echo "export PATH=./bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
+                shift;
+            ;;
 			--mongo1)
-				__folder="mongo"
+                echo "export PATH=~/mongo/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			--mongo2)
-				__folder="mongo2"
+                echo "export PATH=~/mongo2/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			--mongo3)
-			    __folder="mongo3"
-				shift
-			;;
-			--v*)
-				__mongo_branch=${1#*--}
-				__folder="mongo-$__mongo_branch"
+                echo "export PATH=~/mongo3/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
 				shift
 			;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
-				unlink ~/.local/bin
-				unlink ~/.local/lib
+				rm -rf $VENV/.mongo_paths
 				m $1
 				shift
 			;;
 		esac;
 	done;
 
-	[[ -z $__folder ]] && exit 0;
-
-	echo "provided custom master folder ~/$__folder/bazel-last-bin/"
-	unlink ~/.local/bin/mongod
-	unlink ~/.local/bin/mongos
-	unlink ~/.local/lib 
-	ln -s ~/$__folder/bazel-last-bin/mongod ~/.local/bin/mongod || return 1;
-	ln -s ~/$__folder/bazel-last-bin/mongos ~/.local/bin/mongos || return 1;
-	echo "~/$__folder/bazel-last-bin/ installed! Installing libs ...";
-	#ln -s ~/$__folder/build/install/lib ~/.local/lib || return 1;
-	echo "~/$__folder/build/install/lib installed!"
-
+	echo "Success!"
 }
 
 __parse_args()
@@ -208,8 +198,7 @@ __parse_args()
 	[[ -z ${__parsed_args} ]] && __parsed_args=true || return 0;
 
 	__cmd_prefix=;
-	__dir="$HOME/.mcluster/cdata/"
-	_playground_dir="$HOME/.mcluster/pg"
+	__dir="$MCLUSTER_FOLDER/cdata/"
 	__cmd=;
 	__args=;
 

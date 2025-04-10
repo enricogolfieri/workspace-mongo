@@ -22,8 +22,7 @@ _mongo_update_venv_poetry()
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install 'poetry==1.5.1'
 	${__cmd_prefix} export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m poetry install --no-root --sync
-	#${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3  -m pip install mtools
-
+	${__cmo_prefix} buildscripts/poetry_sync.sh
 	)
 
 }
@@ -181,9 +180,6 @@ _mongo_build_bazel()
 	[[ $__target = 'core' ]] && __target="install-devcore";
 	[[ $__target = '--core' ]] && __target="install-devcore";
 	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} --verbose_failures ${@:2}
-	#create a symb link to the last build  (will be used by resmoke for testing)
-	${__cmd_prefix} rm -f $BAZEL_INSTALL_DIR
-	${__cmd_prefix} ln -s bazel-bin/$__target/bin $BAZEL_INSTALL_DIR
 }
 
 
@@ -363,7 +359,6 @@ __mongo_test_bazel()
 		--mongosSetParameters="$__log_component_verbosity" \
 		--jobs=${__tasks} \
 		--log=file \
-		--installDir "$BAZEL_INSTALL_DIR" \
 		$__fcv_opts \
 		$__suite_opts \
 		$@
@@ -592,6 +587,9 @@ mongo-set-patch-workload()
 
 }
 
+alias mongo-spin-cluster='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster.js'
+
+
 ######################################################## General Utility ########################################################################
 
 #downloag last LTS and last continuous version of mongo to enable multiversion local testing
@@ -699,7 +697,6 @@ MONGO_VENV_DIRNAME=${MONGO_VENV_DIRNAME:-'.venv'}
 ICECC_VAR="ICECC=icecc"
 CCACHE_VAR="CCACHE=ccache"
 JOBS=400
-BAZEL_INSTALL_DIR='./bazel-last-bin'
 
 #do not set icecc if command is not found
 if ! command -v icecc &> /dev/null; then
@@ -727,8 +724,10 @@ __mongo_variable_path ()
 			MONGO_TOOLCHAIN_VER="v3";;
 		v7.0)
 			MONGO_TOOLCHAIN_VER="v4";;
-		*)
+		v8.0)
 			MONGO_TOOLCHAIN_VER="v4";;
+		*)
+			MONGO_TOOLCHAIN_VER="v5";;
 	esac
 
 	MONGO_VARIABLE_PATH=${MONGO_VARIABLE_PATH:-"etc/scons/mongodbtoolchain_${MONGO_TOOLCHAIN_VER}_${__toolchain}.vars"}
