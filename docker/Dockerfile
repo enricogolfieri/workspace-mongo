@@ -62,6 +62,3 @@ RUN mkdir -p /tmp/user-tools-output && tar -zxvf /tmp/user-tools.tgz -C /tmp/use
 # NOTE check evergreen website to install it for a different architecture 
 RUN curl https://evg-bucket-evergreen.s3.amazonaws.com/evergreen/clients/evergreen_ad3a8afd665f67cb48b4742b6514230d8a519a60/linux_arm64/evergreen -o /tmp/evergreen
 RUN mv /tmp/evergreen /usr/local/bin/evergreen && sudo chmod +x /usr/local/bin/evergreen
-
-# install workspace 
-RUN git clone https://github.com/enricogolfieri/workspace.git /root/.workspace

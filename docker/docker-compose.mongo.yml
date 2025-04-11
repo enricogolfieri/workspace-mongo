@@ -9,19 +9,17 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - dev-mongo-volume:/root/mongo
-      - dev-mongo-volume-vscode-server:/root/.vscode-server/
-      - dev-mongo-evg-yml:/root/.evergreen.yml
+      - mongo:/root/mongo
+      - vscode-server:/root/.vscode-server
+      - ~/.workspace:/root/.workspace
+      - evergreen-yml:/root/.evergreen.yml
+      - ~/.zsh_history:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
-      - ${WORKSPACE_PATH:-$HOME/.workspace}:/root/workspace
-      - ${ZSHRC_PATH:-$HOME/.zshrc}:/root/.zshrc
-      - ${ZSHENV_PATH:-$HOME/.zshenv}:/root/.zshenv
-      - ${GITCONFIG_PATH:-$HOME/.gitconfig}:/root/.gitconfig
-      - ${GITIGNORE_PATH:-$HOME/.gitignore}:/root/.gitignore
     environment:
       - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
 volumes:
-  dev-mongo-volume:
-  dev-mongo-volume-vscode-server:
-  dev-mongo-evg-yml:
+  mongo:
+  vscode-server:
+  evergreen-yml:
+  
