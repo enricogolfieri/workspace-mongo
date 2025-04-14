@@ -1,0 +1,25 @@
+services:
+  dev-mongo:
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo:/root/mongo
+      - vscode-server:/root/.vscode-server
+      - ~/.workspace:/root/.workspace
+      - evergreen-yml:/root/.evergreen.yml
+      - ~/.zsh_history:/root/.zsh_history
+      - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
+      - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
+    environment:
+      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+volumes:
+  mongo:
+  vscode-server:
+  evergreen-yml:
+  
