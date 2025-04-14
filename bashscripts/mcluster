@@ -183,7 +183,7 @@ link()
 			;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
-				rm -rf $VENV/.mongo_paths
+				echo "export PATH=~/.local/bin:\$PATH" > $VENV/.mongo_paths
 				m $1
 				shift
 			;;

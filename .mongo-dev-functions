@@ -14,12 +14,24 @@ _resmoke_cmd='python ./build/install/bin/resmoke.py'
 
 ######################################################## Install Virtual Environment ########################################################################
 
-_mongo_update_venv_poetry()
+_mongo_update_venv_poetry_v81()
 {
 	( set -e;
 	__mongo-check-wrkdir;
 	__mongo-parse-args $@;
-	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install 'poetry==1.5.1'
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install 'poetry==2.0.0'
+	${__cmd_prefix} export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
+	${__cmo_prefix} buildscripts/poetry_sync.sh
+	)
+
+}
+
+_mongo_update_venv_poetry_v80()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m pip install 'poetry==2.0.0'
 	${__cmd_prefix} export PYTHON_KEYRING_BACKEND=keyring.backends.null.Keyring
 	${__cmd_prefix} ${MONGO_VENV_DIRNAME}/bin/python3 -m poetry install --no-root --sync
 	${__cmo_prefix} buildscripts/poetry_sync.sh
@@ -62,8 +74,12 @@ mongo-venv()
 			_mongo_update_venv_pip;;
 		v7.0)
 			_mongo_update_venv_pip;;
+		v8.0)
+			_mongo_update_venv_poetry_v80;;
+		v8.1)
+			_mongo_update_venv_poetry_v81;;
 		*)
-			_mongo_update_venv_poetry;;
+			_mongo_update_venv_poetry_v81;;
 	esac
 
 	)
@@ -358,6 +374,7 @@ __mongo_test_bazel()
 		--mongodSetParameters="$__log_component_verbosity" \
 		--mongosSetParameters="$__log_component_verbosity" \
 		--jobs=${__tasks} \
+		--installDir bazel-bin/install-dist-test/bin \
 		--log=file \
 		$__fcv_opts \
 		$__suite_opts \
@@ -587,7 +604,9 @@ mongo-set-patch-workload()
 
 }
 
-alias mongo-spin-cluster='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster.js'
+alias mongo-spin-shard1='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster.js'
+alias mongo-spin-shard2='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster-2.js'
+alias mongo-spin-shard2-balanced='mongo-test-locally --suite=sharding $mongows/jstests/spin-cluster-2-balanced.js'
 
 
 ######################################################## General Utility ########################################################################
