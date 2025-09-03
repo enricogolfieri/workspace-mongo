@@ -12,7 +12,7 @@ services:
       - mongo:/root/mongo
       - vscode-server:/root/.vscode-server
       - ~/.workspace:/root/.workspace
-      - evergreen-yml:/root/.evergreen.yml
+      - ~/.evergreen.yml:/root/.evergreen.yml
       - ~/.zsh_history:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
@@ -21,5 +21,4 @@ services:
 volumes:
   mongo:
   vscode-server:
-  evergreen-yml:
   
