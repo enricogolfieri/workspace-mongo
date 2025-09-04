@@ -311,13 +311,30 @@ mongo-dbtest()
 
 _mongo_benchmark_scons()
 {
+	if [[ -z "$__args[1]" ]]; then
+		echo "Usage: mongo-benchmark <benchmark_name>" ;
+		return 1;
+	fi
+
 	${__cmd_prefix} mrlog -c -e ninja -- -j12 ./build/install/bin/$__args[1] && 
 	${__cmd_prefix} mrlog -c -e ./build/install/bin/$__args[1] --  --benchmark_out_format=csv --benchmark_out="./$__args[1].csv"
 }
 
 _mongo_benchmark_bazel()
 {
-	echo "mongo-benchmark for bazel not yet implemented";
+	( 
+
+		set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+
+		if [[ -n $1 ]]; 
+		then
+			${__cmd_prefix} mrlog -c -e bazel -- test +$1 ${@:2}
+		else
+			${__cmd_prefix} bazel test --test_tag_filters=-mongo_benchmark //src/...
+		fi
+	)
 }
 
 mongo-benchmark()
@@ -325,11 +342,6 @@ mongo-benchmark()
 	( set -e;
 		__mongo-check-wrkdir;
 		__mongo-parse-args $@;
-
-		if [[ -z "$__args[1]" ]]; then
-			echo "Usage: mongo-benchmark <benchmark_name>" ;
-			return 1;
-		fi
 
 		case ${__mongo_branch} in
 			v4.*)
@@ -593,7 +605,7 @@ mongo-run-patch ()
 	__mongo-parse-args $@;
 
 		__preselect='-a required'
-		[[ -n $__burn_in ]] && __preselect='--variants all --tasks burn_in_tags_gen';
+		[[ -z $__burn_in ]] && __preselect='--variants all --tasks burn_in_tags_gen';
 		${__cmd_prefix} evergreen patch \
 				--project mongodb-mongo-${__mongo_branch} \
 				--skip_confirm \
@@ -631,6 +643,58 @@ mongo-set-patch()
 			--project mongodb-mongo-${__mongo_branch} \
 			--skip_confirm \
 			-a required ${__finalize} \
+			--description "$(git branch --show-current):${msg}" \
+			${__args[@]} 
+
+	)
+}
+
+# Runs an evergreen patch
+# Options:
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
+mongo-run-patch-perf ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	__preselect='-a perf-required';
+	${__cmd_prefix} evergreen patch \
+			--project sys-perf \
+			--skip_confirm \
+			--auto-description $=__preselect \
+			--finalize \
+			${__args[@]} 
+
+	)
+}
+
+# Runs an evergreen patch
+# Options:
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
+mongo-set-patch-perf ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	msg="No description"
+	if [[ ${__cmd_prefix} != echo ]]; then
+		echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
+		read -r _reply;
+		if [[ ${_reply} =~ (y|Y|yes) ]]; then
+			echo "Type the custom title: " 
+			read -r _input_description;
+			msg="$_input_description"
+		fi;
+	fi;
+
+	${__cmd_prefix} evergreen patch \
+			--project sys-perf \
+			--skip_confirm \
+			-a perf-required ${__finalize} \
 			--description "$(git branch --show-current):${msg}" \
 			${__args[@]} 
 
