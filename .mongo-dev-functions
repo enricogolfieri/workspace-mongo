@@ -330,7 +330,8 @@ _mongo_benchmark_bazel()
 
 		if [[ -n $1 ]]; 
 		then
-			${__cmd_prefix} mrlog -c -e bazel -- test +$1 ${@:2}
+		    # You must use the entire path mongo-benchmark //src/mongo/db/query/plan_cache:plan_cache_classic_bm
+			${__cmd_prefix} mrlog -c -e bazel -- run $1 ${@:2}
 		else
 			${__cmd_prefix} bazel test --test_tag_filters=-mongo_benchmark //src/...
 		fi
@@ -488,6 +489,7 @@ mongo-test-locally() {
     return $?
     )
 }
+alias mtl='mongo-test-locally'
 
 # Run tests in a loop across suites, stopping on first failure
 # Shared test suites arrays
@@ -605,7 +607,7 @@ mongo-run-patch ()
 	__mongo-parse-args $@;
 
 		__preselect='-a required'
-		[[ -z $__burn_in ]] && __preselect='--variants all --tasks burn_in_tags_gen';
+		[[ -n $__burn_in ]] && __preselect='--variants all --tasks burn_in_tags_gen';
 		${__cmd_prefix} evergreen patch \
 				--project mongodb-mongo-${__mongo_branch} \
 				--skip_confirm \
