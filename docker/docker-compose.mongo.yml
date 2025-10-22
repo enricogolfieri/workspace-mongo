@@ -11,9 +11,9 @@ services:
     volumes:
       - mongo:/root/mongo
       - vscode-server:/root/.vscode-server
+      - zsh-history:/root/.zsh_history
       - ~/.workspace:/root/.workspace
       - ~/.evergreen.yml:/root/.evergreen.yml
-      - ~/.zsh_history:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
     environment:
@@ -21,4 +21,5 @@ services:
 volumes:
   mongo:
   vscode-server:
+  zsh-history:
   
