@@ -4,6 +4,7 @@ ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
 _data_file_port=12332
 MCLUSTER_FOLDER=$HOME/.mcluster
 VENV=$HOME/.mcluster/.venv
+
 kill() {
 	__enable_python_env
   echo "About to kill all processes" 
@@ -25,6 +26,7 @@ check-mongod()
 
 venv()
 {
+	mkdir -p $MCLUSTER_FOLDER
 	if [[ -n "$VENV" ]]; then
 		python3 -m venv $VENV;
 	fi
@@ -54,7 +56,7 @@ list()
 }
 
 clean() {
-  kill
+  connect 
   echo "erasing data on $__dir"
   $__cmd_prefix rm -rf $__dir
 }
@@ -112,6 +114,18 @@ connect()
 	local port=$1;
 	[[ -z $1 ]] && port=27017;
 	 $__cmd_prefix mongosh --port $port && return 0;
+}
+
+connect-data-file()
+{
+	source $VENV/.mongo_paths
+	echo "connecting to $_data_file_port"
+	kill
+	__enable_python_env
+	$__cmd_prefix mongod --port $_data_file_port --dbpath $1 --setParameter recoverFromOplogAsStandalone=true > /dev/null 2>&1 &
+	$__cmd_prefix echo "sleeping 3s to wait for mongod to load";
+	$__cmd_prefix sleep 3;
+	connect $_data_file_port;
 }
 
 
