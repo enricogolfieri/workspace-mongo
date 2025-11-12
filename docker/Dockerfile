@@ -1,6 +1,5 @@
 FROM ubuntu:22.04
-RUN apt-get update && \
-      apt-get -y install sudo
+RUN apt-get update && apt-get -y install sudo
 
 # Install dependencies
 RUN apt install -y python3 git gdb vim libxml2-dev libssl-dev libcurl3-dev libkrb5-dev libsasl2-dev libldap-dev python3.10-venv wget curl build-essential
@@ -62,3 +61,9 @@ RUN mkdir -p /tmp/user-tools-output && tar -zxvf /tmp/user-tools.tgz -C /tmp/use
 # NOTE check evergreen website to install it for a different architecture 
 RUN curl https://evg-bucket-evergreen.s3.amazonaws.com/evergreen/clients/evergreen_ad3a8afd665f67cb48b4742b6514230d8a519a60/linux_arm64/evergreen -o /tmp/evergreen
 RUN mv /tmp/evergreen /usr/local/bin/evergreen && sudo chmod +x /usr/local/bin/evergreen
+
+# Create startup script to set core pattern
+COPY ./setup-cores.sh /setup-cores.sh
+RUN chmod +x /setup-cores.sh
+
+ENTRYPOINT ["/setup-cores.sh"]

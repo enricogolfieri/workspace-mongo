@@ -3,6 +3,7 @@ services:
     stdin_open: true
     tty: true
     command: /bin/bash
+    privileged: true 
     build:
       context: .
       dockerfile: Dockerfile
@@ -13,13 +14,16 @@ services:
       - vscode-server:/root/.vscode-server
       - zsh-history:/root/.zsh_history
       - ~/.workspace:/root/.workspace
+      - ~/.workspace/mongovm/.zshrc:/root/.zshrc
+      - ~/.workspace/mongovm/.zshenv:/root/.zshenv
+      - ~/.workspace/mongovm/gitignore:/root/.gitignore
+      - ~/.workspace/mongovm/gitconfig:/root/.gitconfig
       - ~/.evergreen.yml:/root/.evergreen.yml
+      - ~/.zsh_history_mongo:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
-    environment:
-      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      - ~/.ssh/known_hosts:/root/.ssh/known_hosts
 volumes:
   mongo:
   vscode-server:
-  zsh-history:
   
