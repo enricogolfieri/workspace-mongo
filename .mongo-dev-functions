@@ -195,6 +195,9 @@ _mongo_build_bazel()
 	[[ -n $1 ]] && __target=$1;
 	[[ $__target = 'core' ]] && __target="install-devcore";
 	[[ $__target = '--core' ]] && __target="install-devcore";
+	[[ $__target = 'dbtest' ]] && __target="install-dbtest";
+	[[ $__target = '--dbtest' ]] && __target="install-dbtest";
+
 	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} --verbose_failures ${@:2}
 }
 
@@ -273,17 +276,66 @@ mongo-unit()
 	)
 }
 
+######################################################## DbTests ########################################################################
+
+mongo-dbtest()
+{
+	( set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+
+		if [[ -z $1 ]]; then
+			echo "Run mongo-dbtest --list or <test_name>"
+		else
+			case ${__mongo_branch} in
+				v4.*)
+					echo "disabled for v4.*";;
+				v5.*)
+					echo "disabled for v5.*";;
+				v6.*)
+					echo "disabled for v6.*";;
+				v7.*)
+					echo "disabled for v7.*";;
+				v8.0)
+					echo "disabled for v8.0";;
+				*)
+					${__cmd_prefix} bazel-bin/install/bin/dbtest $1
+					_log_result
+					;;
+			esac
+		fi
+	)
+}
+
 ######################################################## Benchmark Test ########################################################################
 
 _mongo_benchmark_scons()
 {
+	if [[ -z "$__args[1]" ]]; then
+		echo "Usage: mongo-benchmark <benchmark_name>" ;
+		return 1;
+	fi
+
 	${__cmd_prefix} mrlog -c -e ninja -- -j12 ./build/install/bin/$__args[1] && 
 	${__cmd_prefix} mrlog -c -e ./build/install/bin/$__args[1] --  --benchmark_out_format=csv --benchmark_out="./$__args[1].csv"
 }
 
 _mongo_benchmark_bazel()
 {
-	echo "mongo-benchmark for bazel not yet implemented";
+	( 
+
+		set -e;
+		__mongo-check-wrkdir;
+		__mongo-parse-args $@;
+
+		if [[ -n $1 ]]; 
+		then
+		    # You must use the entire path mongo-benchmark //src/mongo/db/query/plan_cache:plan_cache_classic_bm
+			${__cmd_prefix} mrlog -c -e bazel -- run $1 ${@:2}
+		else
+			${__cmd_prefix} bazel test --test_tag_filters=-mongo_benchmark //src/...
+		fi
+	)
 }
 
 mongo-benchmark()
@@ -291,11 +343,6 @@ mongo-benchmark()
 	( set -e;
 		__mongo-check-wrkdir;
 		__mongo-parse-args $@;
-
-		if [[ -z "$__args[1]" ]]; then
-			echo "Usage: mongo-benchmark <benchmark_name>" ;
-			return 1;
-		fi
 
 		case ${__mongo_branch} in
 			v4.*)
@@ -366,6 +413,16 @@ mongo-code-analysis()
 #   - Concurrency: --single-task (default), --multi-task
 #   - All those of buildscripts/resmoke.py
 
+_log_result()
+{
+	testresult=$?
+	if [ ${testresult} -eq 0 ]; then
+		echo "OK"
+	else
+		echo "FAILED"
+	fi
+	return ${testresult}
+}
 __mongo_test_bazel()
 {
 	${__cmd_prefix} python buildscripts/resmoke.py run \
@@ -380,14 +437,7 @@ __mongo_test_bazel()
 		$__suite_opts \
 		$@
 
-		testresult=$?
-
-		if [ ${testresult} -eq 0 ]; then
-			echo "OK"
-		else
-			echo "FAILED"
-		fi
-		return ${testresult}
+		_log_result;
 }
 
 __mongo_test_scons()
@@ -403,14 +453,7 @@ __mongo_test_scons()
 		$__suite_opts \
 		$@
 
-		testresult=$?
-
-		if [ ${testresult} -eq 0 ]; then
-			echo "OK"
-		else
-			echo "FAILED"
-		fi
-		return ${testresult}
+		_log_result;
 }
 
 __mongo_test_single()
@@ -446,6 +489,7 @@ mongo-test-locally() {
     return $?
     )
 }
+alias mtl='mongo-test-locally'
 
 # Run tests in a loop across suites, stopping on first failure
 # Shared test suites arrays
@@ -522,6 +566,34 @@ mongo-test-locally-loop() {
     )
 }
 
+# Removes all core dump files (files ending with .core) from the current directory
+# and its subdirectories. Core files are generated when programs crash and can
+# take up significant disk space.
+#
+# Options:
+#   - Branch: --master (default), --v5.3, --v5.0, --v4.4, --v4.2, --v4.0
+mongo-clean-core ()
+{
+   ( set -e;
+   __mongo-check-wrkdir;
+   __mongo-parse-args $@;
+
+   echo "Searching for core files..."
+   core_files=$(find . -name "*.core" -type f 2>/dev/null)
+   
+   if [[ -z "$core_files" ]]; then
+   	echo "No core files found."
+   	return 0
+   fi
+   
+   echo "Found core files:"
+   echo "$core_files"
+   
+   ${__cmd_prefix} find . -name "*.core" -type f -delete
+   echo "Core files cleaned."
+   )
+}
+
 ######################################################## Evergreen Patch ########################################################################
 
 # Runs an evergreen patch
@@ -573,6 +645,58 @@ mongo-set-patch()
 			--project mongodb-mongo-${__mongo_branch} \
 			--skip_confirm \
 			-a required ${__finalize} \
+			--description "$(git branch --show-current):${msg}" \
+			${__args[@]} 
+
+	)
+}
+
+# Runs an evergreen patch
+# Options:
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
+mongo-run-patch-perf ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	__preselect='-a perf-required';
+	${__cmd_prefix} evergreen patch \
+			--project sys-perf \
+			--skip_confirm \
+			--auto-description $=__preselect \
+			--finalize \
+			${__args[@]} 
+
+	)
+}
+
+# Runs an evergreen patch
+# Options:
+#   --burn-in prepares a burn-in only patch
+#	--required (default) prepares a patch with the required variant pre-selected
+mongo-set-patch-perf ()
+{
+	( set -e;
+	__mongo-check-wrkdir;
+	__mongo-parse-args $@;
+
+	msg="No description"
+	if [[ ${__cmd_prefix} != echo ]]; then
+		echo "patch description: ${msg}, Do you want change the description of this Evergreen patch? [y/N]"
+		read -r _reply;
+		if [[ ${_reply} =~ (y|Y|yes) ]]; then
+			echo "Type the custom title: " 
+			read -r _input_description;
+			msg="$_input_description"
+		fi;
+	fi;
+
+	${__cmd_prefix} evergreen patch \
+			--project sys-perf \
+			--skip_confirm \
+			-a perf-required ${__finalize} \
 			--description "$(git branch --show-current):${msg}" \
 			${__args[@]} 
 

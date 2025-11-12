@@ -12,6 +12,7 @@ services:
     volumes:
       - mongo:/root/mongo
       - vscode-server:/root/.vscode-server
+      - zsh-history:/root/.zsh_history
       - ~/.workspace:/root/.workspace
       - ~/.workspace/mongovm/.zshrc:/root/.zshrc
       - ~/.workspace/mongovm/.zshenv:/root/.zshenv
