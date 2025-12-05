@@ -17,6 +17,19 @@ check-py()
 	which python3
 }
 
+check-mongos()
+{
+	__enable_python_env
+	source $VENV/.mongo_paths
+	which mongos
+}
+
+check-path()
+{
+	__enable_python_env
+	cat $VENV/.mongo_paths
+}
+
 check-mongod()
 {
 	__enable_python_env
@@ -176,25 +189,13 @@ link()
 		__folder=;
 		case $1 in
             ".")
-                echo "export PATH=./bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
                 shift;
             ;;
             "")
-                echo "export PATH=./bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
                 shift;
             ;;
-			--mongo1)
-                echo "export PATH=~/mongo/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
-				shift
-			;;
-			--mongo2)
-                echo "export PATH=~/mongo2/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
-				shift
-			;;
-			--mongo3)
-                echo "export PATH=~/mongo3/bazel-bin/src/mongo/db:\$PATH" > $VENV/.mongo_paths
-				shift
-			;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
 				echo "export PATH=~/.local/bin:\$PATH" > $VENV/.mongo_paths
@@ -233,4 +234,3 @@ __parse_args()
 __parse_args $@
 echo "ready to $__cmd"
 $__cmd $__args
-echo "Stay committed"
