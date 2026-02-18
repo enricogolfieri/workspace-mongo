@@ -433,18 +433,31 @@ _log_result()
 }
 __mongo_test_bazel()
 {
-	${__cmd_prefix} python buildscripts/resmoke.py run \
-		--storageEngine=wiredTiger \
-		--storageEngineCacheSizeGB=0.5 \
-		--mongodSetParameters="$__log_component_verbosity" \
-		--mongosSetParameters="$__log_component_verbosity" \
-		--jobs=${__tasks} \
-		--installDir bazel-bin/install-dist-test/bin \
-		$__fcv_opts \
-		$__suite_opts \
-		$@ >| tests.log 2>&1
+	if [[ ${__cmd_prefix} == "echo" ]]; then
+		${__cmd_prefix} python buildscripts/resmoke.py run \
+			--storageEngine=wiredTiger \
+			--storageEngineCacheSizeGB=0.5 \
+			--mongodSetParameters="$__log_component_verbosity" \
+			--mongosSetParameters="$__log_component_verbosity" \
+			--jobs=${__tasks} \
+			--installDir bazel-bin/install-dist-test/bin \
+			$__fcv_opts \
+			$__suite_opts \
+			$@
+	else
+		${__cmd_prefix} python buildscripts/resmoke.py run \
+			--storageEngine=wiredTiger \
+			--storageEngineCacheSizeGB=0.5 \
+			--mongodSetParameters="$__log_component_verbosity" \
+			--mongosSetParameters="$__log_component_verbosity" \
+			--jobs=${__tasks} \
+			--installDir bazel-bin/install-dist-test/bin \
+			$__fcv_opts \
+			$__suite_opts \
+			$@ >| tests.log 2>&1
+	fi
 
-		_log_result;
+	_log_result;
 }
 
 __mongo_test_scons()
