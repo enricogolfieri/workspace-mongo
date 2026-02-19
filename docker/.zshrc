@@ -26,9 +26,6 @@ function load()
     # Syntax highlighting bundle.
     antigen bundle zsh-users/zsh-syntax-highlighting
 
-    # Load custom bundles.
-    antigen bundle /venv
-
     #theme
     antigen theme https://github.com/romkatv/powerlevel10k.git
     antigen bundle enricogolfieri/p10k-config --branch=main
@@ -56,6 +53,15 @@ function load()
     CARGO_HOME="/root/.ds_toolchain/.cargo"
     RUSTUP_HOME="/root/.ds_toolchain/.rustup"
     PATH="/root/.ds_toolchain/coveralls/bin:/root/.ds_toolchain/yq/bin:/root/.ds_toolchain/jq/bin:/root/.ds_toolchain/buf/bin:/root/.ds_toolchain/helm/bin:/root/.ds_toolchain/minikube/bin:/root/.ds_toolchain/mongosh/bin:/root/.ds_toolchain/grpcurl/bin:/root/.ds_toolchain/sccache/bin:/root/.ds_toolchain/protoc/bin:/root/.ds_toolchain/just/bin:/root/.ds_toolchain/.cargo/bin:$PATH"
+
+    ### Set aliases
+    alias ls='ls -h --color=auto'
+    alias ll='ls -l'
+    alias la='ls -la'
+    alias rm='rm -i'
+    alias grep='grep --color=always'
+    alias more='more --RAW-CONTROL-CHARS --chop-long-lines'
+    alias less='less --RAW-CONTROL-CHARS --chop-long-lines --IGNORE-CASE'
 }
 
 function load-w-trace()
