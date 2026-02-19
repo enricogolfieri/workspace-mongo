@@ -1,0 +1,116 @@
+#!/usr/bin/env bash
+#
+# Watch MongoDB _mdb_catalog.wt file for changes and display decoded BSON content
+# Usage: watch_catalog <path_to_mdb_catalog.wt> [interval_seconds]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HEX_2_BSON="${SCRIPT_DIR}/hex_2_bson.py"
+
+# Check arguments
+if [ $# -lt 1 ]; then
+    echo "Usage: watch_catalog <path_to_mdb_catalog.wt> [interval_seconds]"
+    echo ""
+    echo "Example:"
+    echo "  watch_catalog ~/.mcluster/cdata/shard01/rs1/db/_mdb_catalog.wt"
+    echo "  watch_catalog ~/.mcluster/cdata/shard01/rs1/db/_mdb_catalog.wt 5"
+    exit 1
+fi
+
+CATALOG_PATH="$1"
+INTERVAL="${2:-2}"  # Default 2 seconds
+
+# Expand tilde
+CATALOG_PATH="${CATALOG_PATH/#\~/$HOME}"
+
+# Check if catalog file exists
+if [ ! -f "$CATALOG_PATH" ]; then
+    echo "Error: Catalog file not found: $CATALOG_PATH"
+    exit 1
+fi
+
+# Check if hex_2_bson.py exists
+if [ ! -f "$HEX_2_BSON" ]; then
+    echo "Error: hex_2_bson.py not found at $HEX_2_BSON"
+    exit 1
+fi
+
+# Find wt utility
+find_wt() {
+    # Check in PATH
+    if command -v wt &> /dev/null; then
+        command -v wt
+        return 0
+    fi
+    
+    # Find in mongo build directory
+    if [ -d "$HOME/mongo" ]; then
+        local wt_path=$(find "$HOME/mongo" -name wt -type f -executable 2>/dev/null | head -1)
+        if [ -n "$wt_path" ]; then
+            echo "$wt_path"
+            return 0
+        fi
+    fi
+    
+    return 1
+}
+
+WT_PATH=$(find_wt)
+if [ -z "$WT_PATH" ]; then
+    echo "Error: Could not find wt utility"
+    echo "Searched in PATH and ~/mongo/"
+    exit 1
+fi
+
+DB_DIR="$(dirname "$CATALOG_PATH")"
+CATALOG_FILE="$(basename "$CATALOG_PATH")"
+LOCK_FILE="${DB_DIR}/WiredTiger.lock"
+
+echo "Watching catalog: $CATALOG_PATH"
+echo "Using wt utility: $WT_PATH"
+echo "Check interval: ${INTERVAL} seconds"
+echo "Press Ctrl+C to stop"
+echo ""
+
+# Function to dump catalog
+dump_catalog() {
+    echo "================================================================================"
+    echo "Dumping catalog at $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "================================================================================"
+    echo ""
+    
+    # REMOVE THE LOCK
+    if [ -f "$LOCK_FILE" ]; then
+        rm -f "$LOCK_FILE"
+        echo "Removed lock file: $LOCK_FILE"
+    fi
+    
+    # Run wt dump and pipe to hex_2_bson.py
+    "$WT_PATH" -h "$DB_DIR" dump -x "file:$CATALOG_FILE" 2>&1 | python3 "$HEX_2_BSON" -m dump
+}
+
+# Get initial hash
+get_hash() {
+    md5sum "$CATALOG_PATH" 2>/dev/null | cut -d' ' -f1
+}
+
+# Initial dump
+dump_catalog
+LAST_HASH=$(get_hash)
+
+# Watch loop
+while true; do
+    sleep "$INTERVAL"
+    CURRENT_HASH=$(get_hash)
+    
+    if [ "$CURRENT_HASH" != "$LAST_HASH" ]; then
+        echo ""
+        echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+        echo "Change detected!"
+        echo ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"
+        echo ""
+        dump_catalog
+        LAST_HASH="$CURRENT_HASH"
+    fi
+done
