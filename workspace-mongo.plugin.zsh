@@ -19,8 +19,8 @@ function mongo-setup-env()
     else 
         echo "sls repo already exists, skipping download"
     fi
-    
-    ln -sf  $mongows/cursor/skills/mongo-dev $HOME/.cursor/skills/mongo-dev
+    mkdir -p $HOME/.cursor/skills
+    ln -sf $mongows/cursor/skills/mongo-dev $HOME/.cursor/skills/mongo-dev 
 }
 
 
