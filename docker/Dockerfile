@@ -2,7 +2,7 @@ FROM ubuntu:22.04
 RUN apt-get update && apt-get -y install sudo
 
 # Install dependencies
-RUN apt install -y python3 git gdb vim libxml2-dev libssl-dev libcurl3-dev libkrb5-dev libsasl2-dev libldap-dev python3.10-venv wget curl build-essential
+RUN apt install -y python3 git gdb vim libxml2-dev libssl-dev libcurl3-dev libkrb5-dev libsasl2-dev libldap-dev python3.10-venv wget curl build-essential zip
 
 # Install zsh
 RUN apt-get install -y zsh
@@ -65,5 +65,26 @@ RUN mv /tmp/evergreen /usr/local/bin/evergreen && sudo chmod +x /usr/local/bin/e
 # Create startup script to set core pattern
 COPY ./setup-cores.sh /setup-cores.sh
 RUN chmod +x /setup-cores.sh
+
+######  Disaggregated storage requirements ######
+# Install Docker CE + Docker Compose
+RUN apt-get update && apt-get install -y ca-certificates gnupg lsb-release && \
+    install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg && \
+    chmod a+r /etc/apt/keyrings/docker.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+      > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && \
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install AWS CLI v2 (aarch64)
+RUN apt-get install zip -y
+RUN curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip && \
+    cd /tmp && unzip awscliv2.zip && ./aws/install && \
+    rm -rf /tmp/aws /tmp/awscliv2.zip
+
+# Configure Docker to use vfs storage driver (avoids overlay-on-overlay issues)
+RUN mkdir -p /etc/docker && echo '{"storage-driver": "vfs"}' > /etc/docker/daemon.json
 
 ENTRYPOINT ["/setup-cores.sh"]

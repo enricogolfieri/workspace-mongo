@@ -34,6 +34,12 @@ echo "Core limit: $(ulimit -c)"
 echo "Working directory: $(pwd)"
 echo ""
 
+# Start Docker daemon in the background
+dockerd &>/var/log/dockerd.log &
+
+# Wait for Docker to be ready
+until docker info >/dev/null 2>&1; do sleep 1; done
+
 # Execute the command passed to the script
 if [ $# -gt 0 ]; then
     echo "=== Executing: $@ ==="

@@ -3,6 +3,7 @@ services:
     stdin_open: true
     tty: true
     command: /bin/bash
+    image: dev-mongo:latest
     privileged: true 
     build:
       context: .
@@ -14,10 +15,10 @@ services:
       - vscode-server:/root/.vscode-server
       - zsh-history:/root/.zsh_history
       - ~/.workspace:/root/.workspace
-      - ~/.workspace/mongovm/.zshrc:/root/.zshrc
-      - ~/.workspace/mongovm/.zshenv:/root/.zshenv
-      - ~/.workspace/mongovm/gitignore:/root/.gitignore
-      - ~/.workspace/mongovm/gitconfig:/root/.gitconfig
+      - .zshrc:/root/.zshrc
+      - .zshenv:/root/.zshenv
+      - ~/.gitignore:/root/.gitignore
+      - ~/.gitconfig:/root/.gitconfig
       - ~/.evergreen.yml:/root/.evergreen.yml
       - ~/.zsh_history_mongo:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
@@ -26,4 +27,4 @@ services:
 volumes:
   mongo:
   vscode-server:
-  
+  zsh-history:
