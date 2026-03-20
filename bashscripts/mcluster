@@ -6,6 +6,9 @@ MCLUSTER_FOLDER="$HOME/.mcluster"
 VENV="$HOME/.mcluster/.venv"
 SETUP_SENTINEL_PATH="$VENV/.setup_complete"
 
+# source nvm 
+source /root/.nvm/nvm.sh
+
 kill() {
 	__enable_python_env || return 1
   echo "About to kill all processes" 
@@ -99,7 +102,7 @@ install()
 	fi
 
 	if [[ -n "$__cmd_prefix" ]]; then
-		$__cmd_prefix m "$version"
+		$__cmd_prefix m "$version" -y
 		return 0
 	fi
 
@@ -766,7 +769,7 @@ link()
 				local version="${1#v}"
 				local m_bin_path
 				echo "INFO: Activating m version '$version'..." 1>&2
-				if ! m "$version"; then
+				if ! m "$version" -y; then
 					echo "ERROR: Could not install/activate m version '$version'." 1>&2
 					return 1
 				fi

@@ -7,6 +7,12 @@ description: Manage local MongoDB clusters with the mcluster script, including s
 
 Use `bashscripts/mcluster` for local cluster lifecycle and diagnostics.
 
+## Source the necessary paths 
+
+source /root/.antigen/bundles/enricogolfieri/workspace-mongo-main/workspace-mongo.plugin.zsh
+
+to load the necessary path and aliases
+
 ## Quick Start
 
 ```bash
