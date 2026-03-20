@@ -5,6 +5,16 @@ mongo-enable() {
     source $mongows/.profile.dev.zsh
 }
 
+function mongo-install-skills()
+{
+    local installer="$mongows/install.sh"
+    if [ ! -f "$installer" ]; then
+        echo "install.sh not found at $installer"
+        return 1
+    fi
+    bash "$installer" "$@"
+}
+
 function mongo-setup-env()
 {
     # Download mongo repo if not present
@@ -19,8 +29,7 @@ function mongo-setup-env()
     else 
         echo "sls repo already exists, skipping download"
     fi
-    mkdir -p $HOME/.cursor/skills
-    ln -sf $mongows/cursor/skills/mongo-dev $HOME/.cursor/skills/mongo-dev 
+    mongo-install-skills --target cursor
 }
 
 

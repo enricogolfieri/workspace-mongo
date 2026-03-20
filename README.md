@@ -36,6 +36,9 @@ A Docker-based development environment is provided with all dependencies pre-ins
 # Configure git identity and global settings
 mongo-setup-env
 
+# Install Cursor/Claude skills from this workspace
+mongo-install-skills
+
 # Build and start the container
 mongo-build-docker
 
@@ -56,6 +59,9 @@ Additional Docker commands:
 # Configure git identity
 mongo-setup-env
 
+# Install Cursor/Claude skills from this workspace
+mongo-install-skills
+
 # Link shell configs (.zshrc, .zshenv, .gitconfig, .gitignore)
 mongo-setup-workstation
 
@@ -74,6 +80,7 @@ mongo-setup-toolchain
 |---|---|
 | `mongo-enable` | Activate the mongo development environment for the current shell |
 | `mongo-setup-env` | Configure git identity and global settings |
+| `mongo-install-skills` | Install/update Cursor and Claude skill symlinks from this workspace |
 | `mongo-setup-workstation` | Link shell and git configs to your home directory |
 | `mongo-setup-tools` | Install mrlog, db-contrib-tool, and m |
 | `mongo-setup-toolchain` | Install or update the MongoDB toolchain |
