@@ -1,144 +1,291 @@
 #!/bin/bash
 ABSOLUTE_PATH="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-ws_playground_dir=$(dirname $(dirname "$ABSOLUTE_PATH"))/playgrounds
+ws_playground_dir="$(dirname "$(dirname "$ABSOLUTE_PATH")")/playgrounds"
 _data_file_port=12332
-MCLUSTER_FOLDER=$HOME/.mcluster
-VENV=$HOME/.mcluster/.venv
+MCLUSTER_FOLDER="$HOME/.mcluster"
+VENV="$HOME/.mcluster/.venv"
+SETUP_SENTINEL_PATH="$VENV/.setup_complete"
+
+# source nvm 
+source /root/.nvm/nvm.sh
 
 kill() {
-	__enable_python_env
+	__enable_python_env || return 1
   echo "About to kill all processes" 
-  __launch kill 
+  __launch kill
 }
 
 check-py()
 {
-	__enable_python_env
+	__enable_python_env || return 1
 	which python3
 }
 
 check-mongos()
 {
-	__enable_python_env
-	source $VENV/.mongo_paths
+	__enable_python_env || return 1
+	__source_mongo_paths || return 1
 	which mongos
 }
 
 check-path()
 {
-	__enable_python_env
-	cat $VENV/.mongo_paths
+	__enable_python_env || return 1
+	__require_mongo_paths || return 1
+	cat "$VENV/.mongo_paths"
 }
 
 check-mongod()
 {
-	__enable_python_env
-	source $VENV/.mongo_paths
+	__enable_python_env || return 1
+	__source_mongo_paths || return 1
 	which mongod
 }
 
 venv()
 {
-	mkdir -p $MCLUSTER_FOLDER
-	if [[ -n "$VENV" ]]; then
-		python3 -m venv $VENV;
-	fi
-	__enable_python_env
-	pip3 install mtools 
-	pip3 install psutil
-	pip3 install packaging
-	pip3 install python-dateutil
-	pip3 install pymongo
+	echo "WARNING: 'mcluster venv' is deprecated. Use 'mcluster setup'." 1>&2
+	setup "$@"
 }
 
-help(){
-    echo
-    echo -e "\033[1;4;32m""Functions:""\033[0;34m"
-    compgen -A function
-    echo
-    echo -e "\033[1;4;32m""Aliases:""\033[0;34m"
-    compgen -A alias
-    echo
-    echo -e "\033[0m"
+setup()
+{
+	mkdir -p "$MCLUSTER_FOLDER"
+	echo "Setting up mcluster environment in $VENV"
+	echo "Stopping running mongod/mongos processes and cleaning cluster data..."
+	__setup_preflight_cleanup || return 1
+	$__cmd_prefix rm -rf "$VENV"
+	$__cmd_prefix python3 -m venv "$VENV" || return 1
+
+	if [[ -n "$__cmd_prefix" ]]; then
+		$__cmd_prefix . "$VENV/bin/activate"
+		$__cmd_prefix pip3 install --upgrade pip
+		$__cmd_prefix pip3 install mtools psutil packaging python-dateutil pymongo
+		if ! command -v m >/dev/null 2>&1; then
+			$__cmd_prefix npm install -g m
+		fi
+		$__cmd_prefix touch "$SETUP_SENTINEL_PATH"
+		echo "Setup commands emitted (--echo mode)."
+		return 0
+	fi
+
+	# shellcheck disable=SC1090
+	. "$VENV/bin/activate" || return 1
+	pip3 install --upgrade pip || return 1
+	pip3 install mtools psutil packaging python-dateutil pymongo || return 1
+
+	if ! command -v m >/dev/null 2>&1; then
+		if ! command -v npm >/dev/null 2>&1; then
+			echo "ERROR: npm is required to install 'm' but was not found." 1>&2
+			echo "Install npm and rerun: mcluster setup" 1>&2
+			return 1
+		fi
+		npm install -g m || return 1
+	fi
+
+	touch "$SETUP_SENTINEL_PATH" || return 1
+	echo "Setup complete."
+}
+
+install()
+{
+	local version="$1"
+	if [[ -z "$version" ]]; then
+		echo "ERROR: Missing version. Usage: mcluster install <version>" 1>&2
+		return 1
+	fi
+
+	if ! command -v m >/dev/null 2>&1; then
+		echo "ERROR: command 'm' is not available." 1>&2
+		echo "Run: mcluster setup" 1>&2
+		return 1
+	fi
+
+	if [[ -n "$__cmd_prefix" ]]; then
+		$__cmd_prefix m "$version" -y
+		return 0
+	fi
+
+	m "$version"
+}
+
+status()
+{
+	local output_mode="human"
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--json)
+				output_mode="json"
+				shift
+			;;
+			--human)
+				output_mode="human"
+				shift
+			;;
+			*)
+				echo "ERROR: Unknown status option '$1'. Supported: --json, --human" 1>&2
+				return 1
+			;;
+		esac
+	done
+
+	__enable_python_env || return 1
+	__source_mongo_paths || return 1
+
+	local status_json
+	status_json="$(__status_collect_json)" || return 1
+
+	if [[ "$output_mode" == "json" ]]; then
+		echo "$status_json"
+		return 0
+	fi
+
+	__status_print_human "$status_json"
+}
+
+binary()
+{
+	local output_mode="human"
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+			--json)
+				output_mode="json"
+				shift
+			;;
+			--human)
+				output_mode="human"
+				shift
+			;;
+			*)
+				echo "ERROR: Unknown binary option '$1'. Supported: --json, --human" 1>&2
+				return 1
+			;;
+		esac
+	done
+
+	__enable_python_env || return 1
+	if [[ -f "$VENV/.mongo_paths" ]]; then
+		__source_mongo_paths || return 1
+	fi
+
+	local binary_json
+	binary_json="$(__collect_binary_json)" || return 1
+
+	if [[ "$output_mode" == "json" ]]; then
+		echo "$binary_json"
+		return 0
+	fi
+
+	__print_binary_human "$binary_json"
+}
+
+help()
+{
+	echo "Usage: mcluster <command> [args]"
+	echo
+	echo "Setup flow:"
+	echo "  1) mcluster setup"
+	echo "  2) mcluster link .            # local bazel binaries"
+	echo "     or mcluster link <version> # m-managed binaries"
+	echo "  3) mcluster init|initd|init-replica|init-lite|init-cluster  # starts cluster"
+	echo "  4) mcluster start                                          # optional restart only"
+	echo "  5) mcluster status [--json]"
+	echo
+	echo "Main commands:"
+	echo "  help                         Show all commands and their usage"
+	echo "  setup                        Recreate ~/.mcluster/.venv and install all tools"
+	echo "  venv                         Deprecated alias for setup"
+	echo "  install <version>            Install a MongoDB version via m"
+	echo "  link [.|<version>]           Write ~/.mcluster/.venv/.mongo_paths"
+	echo "  init* / restart / kill / list  Cluster lifecycle commands"
+	echo "  status [--json|--human]      Show running mongos/mongod ports and primary"
+	echo "  binary [--json|--human]      Show resolved mongod/mongos/mongosh binaries"
+	echo "  connect [port]               Open mongosh on a port (default 27017)"
+	echo
+	echo "Tips:"
+	echo "  - Setup is mandatory before all commands: mcluster setup"
+	echo "  - If .mongo_paths is missing, run: mcluster link ."
 }
 
 list()
 {
-	__enable_python_env
+	__enable_python_env || return 1
 	__launch list
 }
 
 clean() {
-  connect 
   echo "erasing data on $__dir"
-  $__cmd_prefix rm -rf $__dir
+  $__cmd_prefix rm -rf "$__dir"
 }
 
 launch()
 {
-	__enable_python_env
-	__launch $@ 
+	__enable_python_env || return 1
+	__launch "$@"
 }
 
 init()
 {
-	__enable_python_env
-	__init $@
+	__enable_python_env || return 1
+	__init "$@"
 }
 
 initd()
 {
-	__enable_python_env
-	__init --single $@
+	__enable_python_env || return 1
+	__init --single "$@"
 }
 
 init-replica()
 {
-	__enable_python_env
-	__init --replicaset --nodes 3 $@
+	__enable_python_env || return 1
+	__init --replicaset --nodes 3 "$@"
 }
 
 #1 nodes x 2 shards + 1 node csrs
 init-lite()
 {
-	__enable_python_env
-	__init --replicaset --nodes 1 --sharded 2 $@
+	__enable_python_env || return 1
+	__init --replicaset --nodes 1 --sharded 2 "$@"
 
 }
 
 #3 nodes x 2 shards + 3 node csrs
 init-cluster()
 {
-	__enable_python_env
-	__init --replicaset --nodes 3 --sharded 2 --config 3 $@
+	__enable_python_env || return 1
+	__init --replicaset --nodes 3 --sharded 2 --config 3 "$@"
 }
 
-start()
+restart()
 {
-	__enable_python_env
-	__launch start --dir $__dir
+	__enable_python_env || return 1
+	__require_cluster_initialized || return 1
+	__require_binaries_for_start || return 1
+	__launch start --dir "$__dir"
 }
 
 connect()
 {
 	echo "connecting to $1"
 
-	__enable_python_env
-	local port=$1;
-	[[ -z $1 ]] && port=27017;
-	 $__cmd_prefix mongosh --port $port && return 0;
+	__enable_python_env || return 1
+	__source_mongo_paths || return 1
+	local port="$1"
+	[[ -z "$1" ]] && port=27017
+	$__cmd_prefix mongosh --port "$port" && return 0
 }
 
 connect-data-file()
 {
-	source $VENV/.mongo_paths
+	__enable_python_env || return 1
+	__source_mongo_paths || return 1
 	echo "connecting to $_data_file_port"
-	kill
-	__enable_python_env
-	$__cmd_prefix mongod --port $_data_file_port --dbpath $1 --setParameter recoverFromOplogAsStandalone=true > /dev/null 2>&1 &
+	kill || return 1
+	$__cmd_prefix mongod --port "$_data_file_port" --dbpath "$1" --setParameter recoverFromOplogAsStandalone=true > /dev/null 2>&1 &
 	$__cmd_prefix echo "sleeping 3s to wait for mongod to load";
-	$__cmd_prefix sleep 3;
-	connect $_data_file_port;
+	$__cmd_prefix sleep 3
+	connect "$_data_file_port"
 }
 
 
@@ -146,27 +293,440 @@ connect-data-file()
 
 __launch()
 {
-	$__cmd_prefix mlaunch $@ --dir $__dir 
+	$__cmd_prefix mlaunch "$@" --dir "$__dir"
 }
 
 __init()
 {
 	echo "ready to init..."
-	source $VENV/.mongo_paths
-	__launch init $@ 
+	__require_binaries_for_init "$@" || return 1
+	__launch init "$@"
+}
+
+__return_or_exit()
+{
+	local code="$1"
+	if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+		return "$code"
+	fi
+	exit "$code"
+}
+
+__setup_preflight_cleanup()
+{
+	if [[ -n "$__cmd_prefix" ]]; then
+		$__cmd_prefix mlaunch kill --dir "$__dir"
+		$__cmd_prefix pkill -f '[m]ongod'
+		$__cmd_prefix pkill -f '[m]ongos'
+		$__cmd_prefix rm -rf "$__dir"
+		return 0
+	fi
+
+	# Best-effort stop through mlaunch if an old environment exists.
+	if [[ -f "$VENV/bin/activate" ]]; then
+		# shellcheck disable=SC1090
+		. "$VENV/bin/activate" >/dev/null 2>&1 || true
+		if command -v mlaunch >/dev/null 2>&1; then
+			mlaunch kill --dir "$__dir" >/dev/null 2>&1 || true
+		fi
+	fi
+
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -f '[m]ongod' >/dev/null 2>&1 || true
+		pkill -f '[m]ongos' >/dev/null 2>&1 || true
+	fi
+
+	rm -rf "$__dir" || return 1
+	return 0
+}
+
+__require_setup()
+{
+	if [[ ! -d "$VENV" ]] || [[ ! -f "$VENV/bin/activate" ]] || [[ ! -f "$SETUP_SENTINEL_PATH" ]]; then
+		echo "ERROR: mcluster setup has not been run yet (or is stale)." 1>&2
+		echo "Run: mcluster setup" 1>&2
+		return 1
+	fi
+	return 0
+}
+
+__require_mongo_paths()
+{
+	__require_setup || return 1
+	if [[ ! -f "$VENV/.mongo_paths" ]]; then
+		echo "ERROR: mcluster mongo paths file is missing at '$VENV/.mongo_paths'." 1>&2
+		echo "Run: mcluster link .  (or mcluster link <version>)" 1>&2
+		return 1
+	fi
+	return 0
+}
+
+__source_mongo_paths()
+{
+	__require_mongo_paths || return 1
+	# shellcheck disable=SC1090
+	source "$VENV/.mongo_paths"
+}
+
+__startup_requires_mongos()
+{
+	local startup_file="$__dir/.mlaunch_startup"
+	if [[ ! -f "$startup_file" ]]; then
+		return 1
+	fi
+
+	while IFS= read -r line; do
+		if [[ "$line" == *mongos* ]]; then
+			return 0
+		fi
+	done < "$startup_file"
+	return 1
+}
+
+__missing_binaries()
+{
+	local missing=()
+	local bin
+	for bin in "$@"; do
+		if ! command -v "$bin" >/dev/null 2>&1; then
+			missing+=("$bin")
+		fi
+	done
+	echo "${missing[*]}"
+}
+
+__require_binaries()
+{
+	__source_mongo_paths || return 1
+	local missing
+	missing="$(__missing_binaries "$@")"
+	if [[ -n "$missing" ]]; then
+		echo "ERROR: Missing required MongoDB binaries in PATH: $missing" 1>&2
+		echo "Run: mcluster binary --json" 1>&2
+		echo "Then fix path with: mcluster link .  or  mcluster install <version> && mcluster link <version>" 1>&2
+		return 1
+	fi
+	return 0
+}
+
+__require_binaries_for_init()
+{
+	local required=("mongod")
+	local joined_args=" $* "
+	if [[ "$joined_args" == *" --sharded "* ]]; then
+		required+=("mongos")
+	fi
+	__require_binaries "${required[@]}"
+}
+
+__require_binaries_for_start()
+{
+	local required=("mongod")
+	if __startup_requires_mongos; then
+		required+=("mongos")
+	fi
+	__require_binaries "${required[@]}"
+}
+
+__require_cluster_initialized()
+{
+	if [[ ! -f "$__dir/.mlaunch_startup" ]]; then
+		echo "ERROR: Cluster is not initialized in '$__dir'." 1>&2
+		echo "Run one of: mcluster init | initd | init-replica | init-lite | init-cluster" 1>&2
+		return 1
+	fi
+	return 0
+}
+
+__status_collect_json()
+{
+	MCLUSTER_DIR="$__dir" python3 - <<'PY'
+import json
+import os
+import re
+import subprocess
+
+try:
+    import psutil
+except Exception:
+    psutil = None
+
+cluster_dir = os.environ.get("MCLUSTER_DIR", "")
+
+def extract_port_from_line(line: str):
+    patterns = [
+        r"--port(?:=|\s+)(\d+)",
+        r"\bport(?:=|:|\s+)(\d+)\b",
+        r"\blocalhost:(\d+)\b",
+        r"\b127\.0\.0\.1:(\d+)\b",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, line)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+def list_output():
+    try:
+        proc = subprocess.run(
+            ["mlaunch", "list", "--dir", cluster_dir],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        out_lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+        err_lines = [line.strip() for line in proc.stderr.splitlines() if line.strip()]
+        return proc.returncode, out_lines, err_lines
+    except Exception as exc:
+        return 1, [], [str(exc)]
+
+def parse_ports(lines):
+    mongod = []
+    mongos = []
+    seen_mongod = set()
+    seen_mongos = set()
+    for line in lines:
+        lowered = line.lower()
+        kind = None
+        if "mongod" in lowered:
+            kind = "mongod"
+        elif "mongos" in lowered:
+            kind = "mongos"
+        if kind is None:
+            continue
+
+        port = extract_port_from_line(line)
+        if port is None:
+            continue
+
+        node = {"port": port}
+        if kind == "mongod":
+            if port in seen_mongod:
+                continue
+            seen_mongod.add(port)
+            mongod.append(node)
+        else:
+            if port in seen_mongos:
+                continue
+            seen_mongos.add(port)
+            mongos.append(node)
+    return mongod, mongos
+
+def parse_ports_from_processes():
+    if psutil is None:
+        return [], []
+    mongod = []
+    mongos = []
+    seen_mongod = set()
+    seen_mongos = set()
+    for process in psutil.process_iter(["cmdline"]):
+        try:
+            cmdline = process.info.get("cmdline") or []
+            if not cmdline:
+                continue
+            joined = " ".join(cmdline)
+            if cluster_dir and cluster_dir not in joined:
+                continue
+
+            lowered_cmd = joined.lower()
+            kind = None
+            if "mongod" in lowered_cmd:
+                kind = "mongod"
+            elif "mongos" in lowered_cmd:
+                kind = "mongos"
+            if kind is None:
+                continue
+
+            port = None
+            for index, arg in enumerate(cmdline):
+                if arg == "--port" and index + 1 < len(cmdline):
+                    try:
+                        port = int(cmdline[index + 1])
+                        break
+                    except ValueError:
+                        port = None
+                if arg.startswith("--port="):
+                    try:
+                        port = int(arg.split("=", 1)[1])
+                        break
+                    except ValueError:
+                        port = None
+            if port is None:
+                continue
+
+            node = {"port": port}
+            if kind == "mongod":
+                if port in seen_mongod:
+                    continue
+                seen_mongod.add(port)
+                mongod.append(node)
+            else:
+                if port in seen_mongos:
+                    continue
+                seen_mongos.add(port)
+                mongos.append(node)
+        except Exception:
+            continue
+    return mongod, mongos
+
+def detect_primary(mongod_nodes):
+    for node in sorted(mongod_nodes, key=lambda n: n["port"]):
+        port = str(node["port"])
+        try:
+            js = "const h=db.hello(); print(JSON.stringify({isPrimary: !!(h.isWritablePrimary || h.ismaster), me: h.me || ''}));"
+            proc = subprocess.run(
+                ["mongosh", "--quiet", "--port", port, "--eval", js],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            if proc.returncode != 0:
+                continue
+            lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+            for line in reversed(lines):
+                if line.startswith("{") and line.endswith("}"):
+                    payload = json.loads(line)
+                    if payload.get("isPrimary"):
+                        me = payload.get("me")
+                        return me if me else f"127.0.0.1:{port}"
+                    break
+        except Exception:
+            continue
+    return None
+
+rc, out_lines, err_lines = list_output()
+mongod_nodes, mongos_nodes = parse_ports(out_lines)
+if not mongod_nodes and not mongos_nodes:
+    mongod_nodes, mongos_nodes = parse_ports_from_processes()
+primary = detect_primary(mongod_nodes)
+
+data = {
+    "dir": cluster_dir,
+    "running": bool(mongod_nodes or mongos_nodes),
+    "mongod": sorted(mongod_nodes, key=lambda n: n["port"]),
+    "mongos": sorted(mongos_nodes, key=lambda n: n["port"]),
+    "primary": primary,
+    "mlaunch": {
+        "ok": rc == 0,
+        "exitCode": rc,
+        "output": out_lines,
+        "errors": err_lines,
+    },
+}
+print(json.dumps(data, sort_keys=True))
+PY
+}
+
+__collect_binary_json()
+{
+	MCLUSTER_VENV="$VENV" python3 - <<'PY'
+import json
+import os
+import shutil
+import subprocess
+
+venv = os.environ.get("MCLUSTER_VENV", "")
+mongo_paths_file = os.path.join(venv, ".mongo_paths")
+mongo_paths_line = None
+if os.path.isfile(mongo_paths_file):
+    try:
+        with open(mongo_paths_file, "r", encoding="utf-8") as file_handle:
+            mongo_paths_line = file_handle.read().strip()
+    except Exception:
+        mongo_paths_line = None
+
+def first_version_line(binary):
+    path = shutil.which(binary)
+    if not path:
+        return None
+    try:
+        proc = subprocess.run(
+            [binary, "--version"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+        text = (proc.stdout or proc.stderr or "").strip()
+        for line in text.splitlines():
+            stripped = line.strip()
+            if stripped:
+                return stripped
+    except Exception:
+        return None
+    return None
+
+names = ["mongod", "mongos", "mongosh", "mlaunch", "m"]
+binaries = {}
+for name in names:
+    binaries[name] = {
+        "path": shutil.which(name),
+        "version": first_version_line(name),
+    }
+
+payload = {
+    "mongoPathsFile": mongo_paths_file,
+    "mongoPathsLine": mongo_paths_line,
+    "path": os.environ.get("PATH", ""),
+    "binaries": binaries,
+}
+print(json.dumps(payload, sort_keys=True))
+PY
+}
+
+__print_binary_human()
+{
+	local binary_json="$1"
+	MCLUSTER_BINARY_JSON="$binary_json" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ.get("MCLUSTER_BINARY_JSON", "{}"))
+print(f"mongo_paths file: {payload.get('mongoPathsFile', '')}")
+print(f"mongo_paths line: {payload.get('mongoPathsLine') or 'missing'}")
+for name, info in payload.get("binaries", {}).items():
+    path = info.get("path") or "NOT FOUND"
+    version = info.get("version") or "unknown"
+    print(f"{name}: {path}")
+    print(f"  version: {version}")
+PY
+}
+
+__status_print_human()
+{
+	local status_json="$1"
+	MCLUSTER_STATUS_JSON="$status_json" python3 - <<'PY'
+import json
+import os
+
+payload = json.loads(os.environ.get("MCLUSTER_STATUS_JSON", "{}"))
+mongod_ports = [str(node["port"]) for node in payload.get("mongod", [])]
+mongos_ports = [str(node["port"]) for node in payload.get("mongos", [])]
+
+print(f"Cluster dir: {payload.get('dir', '')}")
+print(f"Running: {'yes' if payload.get('running') else 'no'}")
+print(f"Mongos ports: {', '.join(mongos_ports) if mongos_ports else 'none'}")
+print(f"Mongod ports: {', '.join(mongod_ports) if mongod_ports else 'none'}")
+print(f"Primary: {payload.get('primary') or 'unknown'}")
+PY
 }
 
 __enable_python_env()
 {
+	__require_setup || return 1
 	echo "enabling python env"
-	$__cmd_prefix . $VENV/bin/activate
+	$__cmd_prefix . "$VENV/bin/activate"
 }
 
 __set()
 {
 	#first argument it s one command , followings are arguments
 	if [ -z "$__cmd" ]; then 
-		__cmd=$1;
+		__cmd="$1"
 	else
 		__args="$__args $1"
 	fi
@@ -175,31 +735,56 @@ __set()
 __add_to_path ()
 {	
 	#add to PATH if not already there
-    if [[ "$PATH" =~ (^|:)"${1}"(:|$) ]]
+    if [[ "$PATH" =~ (^|:)"$1"(:|$) ]]
     then
         return 0
     fi
-    export PATH=${1}:$PATH
+    export PATH="$1:$PATH"
 	echo $PATH
 }
 
 link()
 {
+	__require_setup || return 1
+
 	while [[ $# -gt 0 ]]; do
 		__folder=;
 		case $1 in
             ".")
-                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > "$VENV/.mongo_paths"
                 shift;
             ;;
             "")
-                echo "export PATH=./bazel-bin/install/bin:\$PATH" > $VENV/.mongo_paths
+                echo "export PATH=./bazel-bin/install/bin:\$PATH" > "$VENV/.mongo_paths"
                 shift;
             ;;
 			*)
 				[[ -z $1 ]] && echo "Please provide a version or mongo1/mongo2/mongo3 to link the master local folder"
-				echo "export PATH=~/.local/bin:\$PATH" > $VENV/.mongo_paths
-				m $1
+				if ! command -v m >/dev/null 2>&1; then
+					echo "ERROR: command 'm' is not available." 1>&2
+					echo "Run: mcluster setup" 1>&2
+					return 1
+				fi
+
+				local version="${1#v}"
+				local m_bin_path
+				echo "INFO: Activating m version '$version'..." 1>&2
+				if ! m "$version" -y; then
+					echo "ERROR: Could not install/activate m version '$version'." 1>&2
+					return 1
+				fi
+
+				local mongod_path
+				local mongos_path
+				mongod_path="$(command -v mongod 2>/dev/null || true)"
+				mongos_path="$(command -v mongos 2>/dev/null || true)"
+				if [[ -z "$mongod_path" ]] || [[ -z "$mongos_path" ]]; then
+					echo "ERROR: m '$version' did not expose mongod/mongos on PATH." 1>&2
+					return 1
+				fi
+				m_bin_path="$(dirname "$mongod_path")"
+
+				echo "export PATH=$m_bin_path:\$PATH" > "$VENV/.mongo_paths"
 				shift
 			;;
 		esac;
@@ -224,13 +809,41 @@ __parse_args()
 				shift
 			;;
 			*)
-				__set $1;
+				__set "$1";
 				shift
 			;;
 		esac;
 	done;
 }
 
-__parse_args $@
+__command_requires_setup()
+{
+	case "$1" in
+		help|setup|venv)
+			return 1
+		;;
+		*)
+			return 0
+		;;
+	esac
+}
+
+__parse_args "$@"
+
+if [[ -z "$__cmd" ]]; then
+	help
+	__return_or_exit 1
+fi
+
+if ! declare -F "$__cmd" >/dev/null 2>&1; then
+	echo "ERROR: Unknown command '$__cmd'" 1>&2
+	help
+	__return_or_exit 1
+fi
+
+if __command_requires_setup "$__cmd"; then
+	__require_setup || __return_or_exit 1
+fi
+
 echo "ready to $__cmd"
-$__cmd $__args
+"$__cmd" $__args
