@@ -1,4 +1,5 @@
 services:
+  # Dev machine. Backed by volumes to survive container re-deployments
   dev-mongo:
     stdin_open: true
     tty: true
@@ -12,19 +13,16 @@ services:
       - "27017:27017"
     volumes:
       - mongo:/root/mongo
+      - sls:/root/sls
       - vscode-server:/root/.vscode-server
       - zsh-history:/root/.zsh_history
-      - ~/.workspace:/root/.workspace
-      - .zshrc:/root/.zshrc
-      - .zshenv:/root/.zshenv
-      - ~/.gitignore:/root/.gitignore
-      - ~/.gitconfig:/root/.gitconfig
       - ~/.evergreen.yml:/root/.evergreen.yml
-      - ~/.zsh_history_mongo:/root/.zsh_history
       - ~/.ssh/id_rsa:/root/.ssh/id_rsa:ro
       - ~/.ssh/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
       - ~/.ssh/known_hosts:/root/.ssh/known_hosts
+
 volumes:
   mongo:
+  sls:
   vscode-server:
   zsh-history:
