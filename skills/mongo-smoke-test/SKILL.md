@@ -54,6 +54,29 @@ Run `mongo-extract-changes` first and use its file/area summary to pick combinat
 2. Choose tests aligned with the changed areas.
 3. Cap scope to at most 3 suite+test combinations.
 
+### Suite names reference
+
+Suite names use **underscores**, not camelCase. Use these exact names with `--suites=`.
+
+| Suite | Tests from | Fixture |
+|-------|-----------|---------|
+| `core` | `jstests/core/` | Standalone mongod |
+| `core_txns` | `jstests/core/txns/` | Standalone mongod |
+| `no_passthrough` | `jstests/noPassthrough/` | NoOp (tests launch own servers) |
+| `no_passthrough_with_mongod` | `jstests/noPassthrough/` | Standalone mongod |
+| `replica_sets` | `jstests/replsets/` | NoOp (tests launch own RS) |
+| `replica_sets_jscore_passthrough` | `jstests/core/` | 3-node replica set |
+| `sharding` | `jstests/sharding/` | NoOp (tests launch own clusters) |
+| `sharding_jscore_passthrough` | `jstests/core/` | Sharded cluster |
+| `aggregation` | `jstests/aggregation/` | Standalone mongod |
+| `aggregation_mongos_passthrough` | `jstests/aggregation/` | Sharded cluster |
+| `concurrency` | `jstests/concurrency/` | Standalone mongod |
+| `concurrency_replication` | `jstests/concurrency/` | 3-node replica set |
+| `auth` | `jstests/auth/` | Auth-enabled mongod |
+| `causally_consistent_jscore_passthrough` | `jstests/core/` | Causal consistency RS |
+
+Common gotcha: the directory is `jstests/noPassthrough/` (camelCase) but the suite is `no_passthrough` (underscores). When in doubt, run `python3 buildscripts/resmoke.py list-suites | grep <keyword>` to find the exact name.
+
 ## Step 3: Run resmoke sequentially
 
 Use the `resmoke` skill for command construction, activation requirements, suite options, and diagnostics.
