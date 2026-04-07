@@ -205,8 +205,10 @@ _mongo_build_bazel()
 	[[ $__target = '--core' ]] && __target="install-devcore";
 	[[ $__target = 'dbtest' ]] && __target="install-dbtest";
 	[[ $__target = '--dbtest' ]] && __target="install-dbtest";
+	[[ $__target = '--install-dist-test' ]] && __target="install-dist-test";
+	[[ $__target = 'install-dist-test' ]] && __target="install-dist-test";
 
-	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} --verbose_failures ${@:2}
+	${__cmd_prefix} bazel build $=__build_mode_bazel ${__target} --verbose_failures --modify_execution_info=GpgSign=+no-remote ${@:2}
 }
 
 
@@ -237,6 +239,7 @@ mongo-build ()
 }
 
 alias mbuild="mongo-build"
+alias mbuild-disagg="mongo-build --install-dist-test --build_atlas"
 ######################################################## Unit Test ########################################################################
 
 _mongo_unit_scons()
