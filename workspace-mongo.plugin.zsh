@@ -24,11 +24,35 @@ function mongo-setup-env()
         echo "mongo repo already exists, skipping download"
     fi
     # Download sls repo if not present 
-    if [ ! -d $HOME/sls ]; then
+    if [ ! -d $HOME/sls/storage ]; then
         git clone git@github.com:10gen/sls $HOME/sls
     else 
         echo "sls repo already exists, skipping download"
     fi
+
+    # install bazel
+    cd ~/mongo 
+    ./buildscripts/install_bazel.py
+    if [ $? -ne 0 ]; then
+        echo "Failed to install bazel"
+    else 
+        echo "✓ Bazel installed successfully"
+    fi
+
+    # Install disagg toolchain 
+    cd ~/sls/storage
+    etc/toolchain/setup_toolchain.sh
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to install disagg toolchain"
+    else 
+        echo "✓ Disagg toolchain installed successfully"
+    fi
+
+    echo "✓ MongoDB development environment setup complete"
+    echo "Please releoad your shell"
+    ln -sf  $mongows/cursor/skills/mongo-dev $HOME/.cursor/skills/mongo-dev
+    
     mongo-install-skills --target cursor
 }
 
