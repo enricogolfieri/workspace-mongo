@@ -19,8 +19,29 @@ mongo-setup-icecc()
     fi
 }
 
+mongo-setup-kanopy()
+{
+    #!/bin/bash
+    set -e
+
+    VERSION="v0.5.6"
+    ARCH="arm64"  # change to arm64 if needed
+
+    gh release download $VERSION \
+    --repo kanopy-platform/kanopy-oidc \
+    --pattern "kanopy-oidc-linux-${ARCH}-${VERSION}.tgz" \
+    --dir /tmp
+
+    tar -xzf /tmp/kanopy-oidc-linux-${ARCH}-${VERSION}.tgz -C /tmp
+
+    sudo mv /tmp/bin/kanopy-oidc-linux-${ARCH}-${VERSION} /usr/local/bin/kanopy-oidc
+    sudo chmod +x /usr/local/bin/kanopy-oidc
+
+    echo "Done! Run: kanopy-oidc --help"
+}
+
 #setups your working station with the required tools to work with mongo
-mongo-setup-tools()
+mongo-setup-helper-repos()
 {	
 	command -v npm >/dev/null 2>&1 || { echo >&2 "I require npm but it's not installed.  Aborting."; return 1; }
 	command -v cargo >/dev/null 2>&1 || { echo >&2 "I require cargo but it's not installed.  Aborting."; return 1; }
@@ -148,21 +169,6 @@ mongo-setup-repo()
     [ -z "$_branch" ] && _branch="master"
 
     git clone git@github.com:10gen/mongo
-}
-
-mongo-setup-repos()
-{
-    mongo_setup-repo-version v6.0
-    mongo_setup-repo-version v7.0
-    mongo_setup-repo-version v8.0
-    [ -d "~/mongo" ] ||  git clone git@github.com:10gen/mongo ~/mongo
-    [ -d "~/mongo2" ] ||  git clone git@github.com:10gen/mongo ~/mongo2
-    [ -d "~/mongo3" ] ||  git clone git@github.com:10gen/mongo ~/mongo3
-
-    #install workload
-    if [[ ! -d "$HOME/workload" ]]; then
-        git clone git@github.com:10gen/workloads.git $HOME/workload
-    fi
 }
 
 mongo-setup-main-repo()
