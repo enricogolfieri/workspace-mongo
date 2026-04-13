@@ -11,7 +11,7 @@
 
 alias resmoke='python ./build/install/bin/resmoke.py'
 _resmoke_cmd='python ./build/install/bin/resmoke.py'
-_multiversion_bin="./build/install/multiversion-bin/"
+_multiversion_bin="$HOME/multiversion-bin/"
 
 ######################################################## Install Virtual Environment ########################################################################
 
