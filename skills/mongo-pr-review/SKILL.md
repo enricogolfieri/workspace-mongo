@@ -1,6 +1,6 @@
 ---
 name: mongo-pr-review
-description: Performs deep pull request reviews by quickly explaining code changes and identifying potential bugs grouped by severity (critical, non-critical, nit). Use when reviewing pull requests, code diffs, or when the user asks for structured review comments with code links and reviewer-facing reasoning.
+description: Performs deep pull request reviews by quickly explaining code changes and identifying potential bugs grouped by severity (critical, non-critical, nit). Use when reviewing pull requests, code diffs, or when the user asks for structured review comments with Cursor/VSCode-clickable code references and reviewer-facing reasoning.
 ---
 
 # Mongo PR Review
@@ -67,8 +67,10 @@ Focus exclusively on what changed since the last review:
 ## Hard Requirements
 
 - Every finding must include a code reference.
-- Prefer clickable markdown links for code when possible.
-- If a clickable link is unavailable, include backticked path and line range.
+- Prefer Cursor/VSCode code citation blocks over GitHub or markdown links.
+- For each finding, include a separate code citation block using the format `startLine:endLine:path/to/file.ext` followed by at least 1 line of real code from that file. This is the most reliable way to make code clickable in Cursor.
+- Do not prefer GitHub blob links unless the user explicitly asks for web links.
+- If a code citation block is not possible, include backticked path and line range.
 - Every finding must include both:
   - **Review comment**: concise message to post on the PR.
   - **Explanation**: reviewer-facing reasoning, impact, and severity logic.
@@ -79,7 +81,7 @@ Focus exclusively on what changed since the last review:
 
 Use this structure exactly:
 
-```markdown
+````markdown
 ## Change Summary
 - <quick explanation of what changed>
 - <quick explanation of what changed>
@@ -89,25 +91,29 @@ Use this structure exactly:
 
 ## Critical (must warn immediately)
 - **Finding:** <title>
-  - **Code:** [path/to/file.ext#Lx-Ly](path/to/file.ext#Lx-Ly)
+  - **Code:** include a Cursor/VSCode citation block immediately below this bullet, for example:
+
+```120:146:path/to/file.ext
+// relevant code line(s) here
+```
   - **Review comment:** <what the author should change now>
   - **Explanation:** <why this is risky, expected failure mode, why critical>
 
 ## Non-Critical (acceptable for now, but should be tracked)
 - **Finding:** <title>
-  - **Code:** [path/to/file.ext#Lx-Ly](path/to/file.ext#Lx-Ly)
+  - **Code:** include a Cursor/VSCode citation block immediately below this bullet
   - **Review comment:** <suggested fix>
   - **Explanation:** <trade-off, impact, and urgency>
 
 ## Nit (style or preference)
 - **Finding:** <title>
-  - **Code:** [path/to/file.ext#Lx-Ly](path/to/file.ext#Lx-Ly)
+  - **Code:** include a Cursor/VSCode citation block immediately below this bullet
   - **Review comment:** <small improvement suggestion>
 
 ## Verdict
 **{APPROVE | REQUEST CHANGES | COMMENT}**
 {One-sentence rationale}
-```
+````
 
 For **subsequent review rounds**, replace the analysis sections with:
 
@@ -121,14 +127,14 @@ For **subsequent review rounds**, replace the analysis sections with:
 | {comment summary} | ✅ Resolved / ⚠️ Partial / ❌ Unresolved | {notes} |
 
 ## New Issues Found
-{Any new bugs or concerns, or "None"}
+{If any new bugs or concerns exist, list them with the same finding structure and Cursor/VSCode citation blocks used above; otherwise write "None"}
 
 ## Updated Verdict
 **{APPROVE | REQUEST CHANGES | COMMENT}**
 {Rationale}
 ```
 
-Fallback when links are not possible:
+Fallback when Cursor/VSCode citation blocks are not possible:
 
 ```markdown
 - **Code:** `path/to/file.ext:120-146`
