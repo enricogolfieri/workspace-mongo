@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+target_dir="${HOME}/.kanopy"
+target_file="${target_dir}/token-devprod-mcp-proxy-prod.json"
+
+mkdir -p "${target_dir}"
+
+tmp_stdout="$(mktemp)"
+tmp_stderr="$(mktemp)"
+
+cleanup() {
+  rm -f "${tmp_stdout}" "${tmp_stderr}"
+}
+trap cleanup EXIT
+
+extract_url() {
+  awk '
+    match($0, /(https?:\/\/[^[:space:]]+)/, m) {
+      print m[1]
+      exit
+    }
+  ' "$@"
+}
+
+echo "Starting kanopy device login..."
+kanopy-oidc login -n -f device > >(tee "${tmp_stdout}") 2> >(tee "${tmp_stderr}" >&2) &
+login_pid=$!
+
+login_url=""
+while kill -0 "${login_pid}" 2>/dev/null; do
+  if [[ -z "${login_url}" ]]; then
+    login_url="$(extract_url "${tmp_stdout}" "${tmp_stderr}" || true)"
+    if [[ -n "${login_url}" ]]; then
+      echo
+      echo "Login URL: ${login_url}"
+      echo "Grant access in your browser. Waiting for completion..."
+      echo
+    fi
+  fi
+  sleep 1
+done
+
+if ! wait "${login_pid}"; then
+  echo "kanopy-oidc login failed." >&2
+  exit 1
+fi
+
+if [[ -z "${login_url}" ]]; then
+  login_url="$(extract_url "${tmp_stdout}" "${tmp_stderr}" || true)"
+fi
+
+if [[ -n "${login_url}" ]]; then
+  echo "Login URL: ${login_url}"
+else
+  echo "Could not detect a login URL in command output." >&2
+fi
+
+if [[ ! -s "${tmp_stdout}" ]]; then
+  echo "No token output was captured on stdout." >&2
+  exit 1
+fi
+
+cp "${tmp_stdout}" "${target_file}"
+chmod 600 "${target_file}"
+
+echo "Token written to ${target_file}"
